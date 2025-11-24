@@ -1,0 +1,32 @@
+{
+  "id": "wordpress_comment_post",
+  "name": "Comment Posted",
+  "description": "Triggers when a comment is posted on a WordPress post",
+  "version": "1.0.0",
+  "category": "wordpress",
+  "icon": "comment",
+  "outputs": {
+    "comment_id": {
+      "type": "integer",
+      "label": "Comment ID"
+    },
+    "post_id": {
+      "type": "integer",
+      "label": "Post ID"
+    },
+    "author": {
+      "type": "string",
+      "label": "Comment Author"
+    },
+    "content": {
+      "type": "string",
+      "label": "Comment Content"
+    },
+    "email": {
+      "type": "string",
+      "label": "Author Email"
+    }
+  },
+  "handler": "U43\\Triggers\\WordPress\\Comment_Trigger"
+}
+

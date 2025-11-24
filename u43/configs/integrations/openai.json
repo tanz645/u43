@@ -1,0 +1,24 @@
+{
+  "id": "openai",
+  "name": "OpenAI",
+  "description": "OpenAI ChatGPT integration",
+  "version": "1.0.0",
+  "icon": "openai",
+  "authentication": {
+    "type": "api_key",
+    "header_name": "Authorization",
+    "header_format": "Bearer {api_key}",
+    "storage": "encrypted"
+  },
+  "api_base_url": "https://api.openai.com/v1",
+  "endpoints": {
+    "chat": "/chat/completions"
+  },
+  "settings": {
+    "default_model": "gpt-3.5-turbo",
+    "default_temperature": 0.7,
+    "default_max_tokens": 1000,
+    "timeout": 30
+  }
+}
+

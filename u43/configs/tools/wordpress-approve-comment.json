@@ -1,0 +1,32 @@
+{
+  "id": "wordpress_approve_comment",
+  "name": "Approve Comment",
+  "description": "Approves a WordPress comment",
+  "version": "1.0.0",
+  "category": "wordpress",
+  "icon": "check",
+  "inputs": {
+    "comment_id": {
+      "type": "integer",
+      "required": true,
+      "label": "Comment ID"
+    }
+  },
+  "outputs": {
+    "success": {
+      "type": "boolean",
+      "label": "Success"
+    },
+    "comment_id": {
+      "type": "integer",
+      "label": "Comment ID"
+    },
+    "status": {
+      "type": "string",
+      "label": "Status"
+    }
+  },
+  "handler": "U43\\Tools\\Built_In\\WordPress\\Approve_Comment",
+  "permissions": ["moderate_comments"]
+}
+

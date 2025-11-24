@@ -1,0 +1,68 @@
+{
+  "name": "Comment Moderation",
+  "description": "Automatically moderate comments using AI",
+  "category": "WordPress",
+  "nodes": [
+    {
+      "id": "trigger_1",
+      "type": "trigger",
+      "position": { "x": 100, "y": 200 },
+      "config": {
+        "title": "Comment Posted",
+        "trigger_type": "wordpress_comment_post"
+      }
+    },
+    {
+      "id": "agent_1",
+      "type": "agent",
+      "position": { "x": 300, "y": 200 },
+      "config": {
+        "title": "AI Decision Agent",
+        "agent_id": "llm_decision_agent",
+        "inputs": {
+          "prompt": "Analyze this comment and decide: approve, spam, or delete. Comment: {{trigger_data.content}}",
+          "context": {
+            "author": "{{trigger_data.author}}",
+            "email": "{{trigger_data.email}}"
+          }
+        }
+      }
+    },
+    {
+      "id": "condition_1",
+      "type": "condition",
+      "position": { "x": 500, "y": 200 },
+      "config": {
+        "title": "Check Decision",
+        "field": "{{agent_1.decision}}",
+        "operator": "equals",
+        "value": "approve"
+      }
+    },
+    {
+      "id": "action_approve",
+      "type": "action",
+      "position": { "x": 700, "y": 150 },
+      "config": {
+        "title": "Approve Comment",
+        "tool_id": "wordpress_approve_comment"
+      }
+    },
+    {
+      "id": "action_spam",
+      "type": "action",
+      "position": { "x": 700, "y": 250 },
+      "config": {
+        "title": "Mark as Spam",
+        "tool_id": "wordpress_spam_comment"
+      }
+    }
+  ],
+  "edges": [
+    { "from": "trigger_1", "to": "agent_1" },
+    { "from": "agent_1", "to": "condition_1" },
+    { "from": "condition_1", "to": "action_approve" },
+    { "from": "condition_1", "to": "action_spam" }
+  ]
+}
+

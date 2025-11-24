@@ -16,6 +16,10 @@ This document provides an overview of integrations. For detailed documentation o
 ### Collaboration Tools
 - **[Slack](integrations/collaboration/slack.md)** - Team communication and notifications
 
+### Google Integrations
+- **[Google APIs](integrations/google/index.md)** - Drive, Docs, Sheets, Calendar, Gmail integration (🚧 In Development)
+  - See [Development Plan](integrations/google/DEVELOPMENT_PLAN.md) for phased implementation roadmap
+
 ### Project Management Tools
 - **[Jira](integrations/project-management/jira.md)** - Issue tracking and project management
 - **[Trello](integrations/project-management/trello.md)** - Board and card management

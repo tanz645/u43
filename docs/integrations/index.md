@@ -38,6 +38,13 @@ Team communication and collaboration platforms:
 
 - **[Slack](collaboration/slack.md)** - Team communication and notifications
 
+## Google Integrations
+
+Google services and APIs:
+
+- **[Google APIs](google/index.md)** - Drive, Docs, Sheets, Calendar, Gmail integration (🚧 In Development)
+  - See [Development Plan](google/DEVELOPMENT_PLAN.md) for implementation roadmap
+
 ## Project Management Tools
 
 Project and task management platforms:

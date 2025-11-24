@@ -1,0 +1,32 @@
+{
+  "id": "wordpress_spam_comment",
+  "name": "Spam Comment",
+  "description": "Marks a WordPress comment as spam",
+  "version": "1.0.0",
+  "category": "wordpress",
+  "icon": "spam",
+  "inputs": {
+    "comment_id": {
+      "type": "integer",
+      "required": true,
+      "label": "Comment ID"
+    }
+  },
+  "outputs": {
+    "success": {
+      "type": "boolean",
+      "label": "Success"
+    },
+    "comment_id": {
+      "type": "integer",
+      "label": "Comment ID"
+    },
+    "status": {
+      "type": "string",
+      "label": "Status"
+    }
+  },
+  "handler": "U43\\Tools\\Built_In\\WordPress\\Spam_Comment",
+  "permissions": ["moderate_comments"]
+}
+

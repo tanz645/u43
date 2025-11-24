@@ -1,0 +1,44 @@
+{
+  "id": "wordpress_send_email",
+  "name": "Send Email",
+  "description": "Sends an email using WordPress wp_mail",
+  "version": "1.0.0",
+  "category": "wordpress",
+  "icon": "email",
+  "inputs": {
+    "to": {
+      "type": "string",
+      "required": true,
+      "label": "To",
+      "description": "Recipient email address"
+    },
+    "subject": {
+      "type": "string",
+      "required": true,
+      "label": "Subject",
+      "description": "Email subject"
+    },
+    "message": {
+      "type": "string",
+      "required": true,
+      "label": "Message",
+      "description": "Email message body"
+    }
+  },
+  "outputs": {
+    "success": {
+      "type": "boolean",
+      "label": "Success"
+    },
+    "to": {
+      "type": "string",
+      "label": "To"
+    },
+    "subject": {
+      "type": "string",
+      "label": "Subject"
+    }
+  },
+  "handler": "U43\\Tools\\Built_In\\WordPress\\Send_Email"
+}
+

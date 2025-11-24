@@ -1,0 +1,28 @@
+/**
+ * U43 Admin Styles
+ */
+
+.status-published {
+    color: #00a32a;
+    font-weight: 600;
+}
+
+.status-draft {
+    color: #646970;
+}
+
+.status-paused {
+    color: #dba617;
+}
+
+.workflow-preview {
+    background: #f0f0f1;
+    padding: 20px;
+    margin: 20px 0;
+    border-left: 4px solid #2271b1;
+}
+
+.workflow-preview ol {
+    margin-left: 20px;
+}
+

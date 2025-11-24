@@ -4,7 +4,7 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    WordPress Core                            │
+│                    WordPress Core                           │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
 │  │   Hooks      │  │   Events     │  │   Filters    │      │
 │  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘      │
@@ -88,6 +88,107 @@
 - Handles OAuth flows for third-party services
 - Manages credential validation and refresh
 - Supports multiple credential instances per integration
+
+## Extensibility
+
+The architecture is designed to be highly extensible, allowing developers to add new components and even new node types as needed.
+
+### Adding New Components Within Existing Categories
+
+**Adding New Tools** (becomes Action nodes):
+1. Create configuration file: `configs/tools/my-tool.json`
+2. Create handler class extending `Tool_Base`
+3. Auto-discovered and registered via Tools Registry
+
+**Adding New Agents** (becomes Agent nodes):
+1. Create configuration file: `configs/agents/my-agent.json`
+2. Create handler class extending `Agent_Base`
+3. Auto-discovered and registered via Agents Registry
+
+**Adding New Triggers** (becomes Trigger nodes):
+1. Create configuration file: `configs/triggers/my-trigger.json`
+2. Create handler class extending `Trigger_Base`
+3. Auto-discovered and registered via Triggers Registry
+
+**Adding New Actions** (becomes Action nodes):
+1. Create configuration file: `configs/actions/my-action.json`
+2. Create handler class extending `Action_Base`
+3. Auto-discovered and registered via Actions Registry
+
+### Adding New Node Type Categories
+
+The architecture supports adding entirely new node type categories beyond the built-in types (trigger, action, agent, condition, delay, loop, data transformation, error handling).
+
+**To add a new node type category:**
+
+1. **Create a new registry**:
+   - Add `class-{type}-registry.php` in `includes/registry/`
+   - Extend the base registry class
+   - Implement registration and discovery methods
+
+2. **Create base class**:
+   - Add `class-{type}-base.php` in `includes/{type}/`
+   - Define the interface/contract for the new node type
+   - Implement common functionality
+
+3. **Update Executor Engine**:
+   - Add handling for the new node type in `class-executor.php`
+   - Implement execution logic for the new type
+
+4. **Update Flow Manager**:
+   - Add validation rules for the new node type
+   - Update node schema validation
+
+5. **Add configuration schema**:
+   - Create `schemas/{type}-schema.json` for validation
+   - Define required and optional fields
+
+6. **Update UI/Workflow Builder**:
+   - Add UI components for the new node type
+   - Add to node palette in workflow builder
+   - Implement node configuration UI
+
+7. **Register the new registry**:
+   - Add registry initialization in `class-core.php`
+   - Hook into the plugin loading process
+
+**Example: Adding a "Notification" node type**
+
+```php
+// 1. Registry: includes/registry/class-notification-registry.php
+class Notification_Registry extends Registry_Base {
+    // Register notification handlers
+}
+
+// 2. Base class: includes/notifications/class-notification-base.php
+abstract class Notification_Base {
+    abstract public function send($data);
+}
+
+// 3. Configuration: configs/notifications/email-notification.json
+{
+  "id": "email_notification",
+  "type": "notification",
+  "name": "Email Notification",
+  "handler": "Notifications\\Email"
+}
+```
+
+**Hooks for Extension**:
+
+- `aw_register_node_types`: Filter to add custom node types
+- `aw_node_type_config`: Filter to modify node type configuration
+- `aw_before_node_execute`: Action before node execution
+- `aw_after_node_execute`: Action after node execution
+
+### Auto-Discovery
+
+The configuration system automatically discovers new components in:
+- `wp-content/plugins/{plugin-name}/aw-configs/` - Plugin-specific configs
+- `wp-content/uploads/aw-configs/` - User-uploaded configs
+- `wp-content/themes/{theme-name}/aw-configs/` - Theme-specific configs
+
+This allows third-party plugins and themes to extend the workflow system without modifying core files.
 
 ## Plugin Structure
 

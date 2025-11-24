@@ -1,0 +1,23 @@
+# WordPress
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Dependencies
+node_modules/
+vendor/
+
+# Build files
+*.log
+*.cache
+admin/assets/dist/
+
+# Environment
+.env
+.env.local

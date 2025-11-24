@@ -43,7 +43,7 @@ AI-powered agents that can:
 - **[RAG & Vector Stores](docs/RAG_VECTOR_STORES.md)** - Retrieval-Augmented Generation and vector database integrations
 - **[Integrations](docs/INTEGRATIONS.md)** - WordPress integration and third-party plugin examples ([Browse all integrations](docs/integrations/))
 - **[API Reference](docs/API.md)** - REST API and PHP API documentation
-- **[Development Guide](docs/DEVELOPMENT.md)** - Setup, testing, and contribution guidelines
+- **[Development Documentation](docs/development/)** - Setup, testing, development plans, and contribution guidelines
 
 ## Features
 

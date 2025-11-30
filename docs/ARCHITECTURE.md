@@ -115,6 +115,28 @@ The architecture is designed to be highly extensible, allowing developers to add
 2. Create handler class extending `Action_Base`
 3. Auto-discovered and registered via Actions Registry
 
+**Adding New Admin Handlers** (for integration-specific admin functionality):
+1. Create handler file: `admin/handlers/class-{integration}-handler.php`
+2. Follow naming pattern: `class-{integration}-handler.php`
+3. Use namespace: `U43\Admin\Handlers\{Integration}_Handler`
+4. Register AJAX actions in constructor
+5. Auto-discovered and loaded by `Admin::load_handlers()`
+
+Example:
+```php
+namespace U43\Admin\Handlers;
+
+class Slack_Handler {
+    public function __construct() {
+        add_action('wp_ajax_u43_test_slack_connection', [$this, 'ajax_test_connection']);
+    }
+    
+    public function ajax_test_connection() {
+        // Handler implementation
+    }
+}
+```
+
 ### Adding New Node Type Categories
 
 The architecture supports adding entirely new node type categories beyond the built-in types (trigger, action, agent, condition, delay, loop, data transformation, error handling).
@@ -250,7 +272,10 @@ wp-agentic-workflow/
 │           ├── tools.php
 │           └── agents.php
 ├── admin/
-│   ├── class-admin.php
+│   ├── class-admin.php              # Main admin class
+│   ├── handlers/                    # Modular admin handlers (one per integration)
+│   │   ├── class-whatsapp-handler.php
+│   │   └── class-{integration}-handler.php
 │   ├── assets/
 │   │   ├── css/
 │   │   ├── js/

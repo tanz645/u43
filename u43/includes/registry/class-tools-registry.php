@@ -16,10 +16,11 @@ class Tools_Registry extends Registry_Base {
      *
      * @param string $tool_id Tool ID
      * @param array $inputs Input parameters
+     * @param array $context Execution context (optional)
      * @return mixed
      * @throws \Exception
      */
-    public function execute($tool_id, $inputs = []) {
+    public function execute($tool_id, $inputs = [], $context = []) {
         $tool = $this->get($tool_id);
         
         if (!$tool) {
@@ -28,6 +29,16 @@ class Tools_Registry extends Registry_Base {
         
         if (!($tool instanceof Tool_Base)) {
             throw new \Exception("Tool '{$tool_id}' is not a valid tool instance");
+        }
+        
+        // Pass context if tool supports it (check if execute method accepts second parameter)
+        if (method_exists($tool, 'execute')) {
+            $reflection = new \ReflectionMethod($tool, 'execute');
+            $params = $reflection->getParameters();
+            
+            if (count($params) > 1) {
+                return $tool->execute($inputs, $context);
+            }
         }
         
         return $tool->execute($inputs);

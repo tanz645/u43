@@ -1,0 +1,75 @@
+{
+  "id": "whatsapp_send_message",
+  "name": "Send WhatsApp Message",
+  "description": "Sends a text or template message via WhatsApp Cloud API",
+  "version": "1.0.0",
+  "category": "whatsapp",
+  "icon": "whatsapp",
+  "integration": "whatsapp",
+  "inputs": {
+    "phone_numbers": {
+      "type": "array",
+      "required": false,
+      "label": "Phone Numbers",
+      "description": "Array of phone numbers to send to (with country code, e.g., ['8801345318757', '+1234567890']). This takes precedence over the variable input.",
+      "default": []
+    },
+    "phone_number_variable": {
+      "type": "string",
+      "required": false,
+      "label": "Phone Number Variable",
+      "description": "Variable name from previous node containing phone number(s). Can be a single number or array of numbers."
+    },
+    "message": {
+      "type": "string",
+      "required": false,
+      "label": "Message Text",
+      "description": "Message text to send (for text messages)"
+    },
+    "template_name": {
+      "type": "string",
+      "required": false,
+      "label": "Template Name",
+      "description": "Template name (for template messages, e.g., 'hello_world')"
+    },
+    "template_language": {
+      "type": "string",
+      "required": false,
+      "label": "Template Language Code",
+      "description": "Template language code (e.g., 'en_US', 'en_GB')",
+      "default": "en_US"
+    },
+    "message_type": {
+      "type": "string",
+      "required": true,
+      "label": "Message Type",
+      "description": "Type of message to send",
+      "default": "text",
+      "options": {
+        "text": "Text Message",
+        "template": "Template Message"
+      }
+    }
+  },
+  "outputs": {
+    "message_id": {
+      "type": "string",
+      "label": "Message ID"
+    },
+    "status": {
+      "type": "string",
+      "label": "Status"
+    },
+    "sent_at": {
+      "type": "integer",
+      "label": "Sent At"
+    },
+    "sent_to": {
+      "type": "array",
+      "label": "Sent To"
+    }
+  },
+  "handler": "U43\\Tools\\WhatsApp\\Send_Message"
+}
+
+

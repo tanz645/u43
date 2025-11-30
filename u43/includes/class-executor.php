@@ -129,55 +129,21 @@ class Executor {
                     // Resolve inputs from config (for action nodes, not for prompts)
                     $resolved_inputs = $this->resolve_inputs($node['config']['inputs'] ?? [], $context);
                     
-                    // Use user's prompt if provided, otherwise use from inputs or auto-generate
+                    // Validate that a prompt is provided - no default prompts allowed
+                    if (empty($user_prompt) && empty($resolved_inputs['prompt'])) {
+                        throw new \Exception('Agent node requires a prompt. Please configure a prompt in the node settings.');
+                    }
+                    
+                    // Use user's prompt if provided, otherwise use from inputs
                     if (!empty($user_prompt)) {
-                        // Use prompt as-is (no template resolution)
-                        $resolved_inputs['prompt'] = $user_prompt;
-                    } elseif (isset($resolved_inputs['prompt'])) {
-                        // Prompt was in inputs config
+                        // Resolve variables in prompt (e.g., {{trigger_data.content}}, {{node_id.field}})
+                        $resolved_inputs['prompt'] = $this->resolve_template($user_prompt, $context);
+                    } elseif (isset($resolved_inputs['prompt']) && !empty($resolved_inputs['prompt'])) {
+                        // Prompt was in inputs config - resolve variables
+                        $resolved_inputs['prompt'] = $this->resolve_template($resolved_inputs['prompt'], $context);
                     } else {
-                        // Auto-populate inputs if not configured
-                        // For comment moderation workflows, automatically include comment data
-                        if (!empty($context['trigger_data'])) {
-                            $trigger_data = $context['trigger_data'];
-                            
-                            // Get custom decision options from config
-                            $custom_decisions = $node['config']['custom_decisions'] ?? '';
-                            $decision_options = ['yes', 'no', 'maybe'];
-                            
-                            if (!empty($custom_decisions)) {
-                                // Parse custom decisions (comma-separated)
-                                $custom_list = array_map('trim', explode(',', $custom_decisions));
-                                $decision_options = array_merge($decision_options, $custom_list);
-                                $decision_options = array_unique($decision_options);
-                            }
-                            
-                            $decision_options_str = implode(', ', $decision_options);
-                            
-                            // Build a default prompt with comment data
-                            $comment_content = $trigger_data['content'] ?? '';
-                            $comment_author = $trigger_data['author'] ?? 'Unknown';
-                            $comment_email = $trigger_data['email'] ?? '';
-                            
-                            $resolved_inputs['prompt'] = "Review the following comment and make a decision:\n\n";
-                            $resolved_inputs['prompt'] .= "Author: {$comment_author}\n";
-                            $resolved_inputs['prompt'] .= "Email: {$comment_email}\n";
-                            $resolved_inputs['prompt'] .= "Content: {$comment_content}\n\n";
-                            $resolved_inputs['prompt'] .= "Make a decision: {$decision_options_str}.";
-                        } else {
-                            // No trigger data, create minimal prompt
-                            $custom_decisions = $node['config']['custom_decisions'] ?? '';
-                            $decision_options = ['yes', 'no', 'maybe'];
-                            
-                            if (!empty($custom_decisions)) {
-                                $custom_list = array_map('trim', explode(',', $custom_decisions));
-                                $decision_options = array_merge($decision_options, $custom_list);
-                                $decision_options = array_unique($decision_options);
-                            }
-                            
-                            $decision_options_str = implode(', ', $decision_options);
-                            $resolved_inputs['prompt'] = "Analyze the given information and make a decision: {$decision_options_str}.";
-                        }
+                        // This should not happen due to validation above, but just in case
+                        throw new \Exception('Agent node requires a prompt. Please configure a prompt in the node settings.');
                     }
                     
                     // Always include trigger_data in context if available
@@ -345,7 +311,7 @@ class Executor {
                             $inputs['comment_id'] = absint($inputs['comment_id']);
                         }
                         
-                        $output = $this->tools_registry->execute($tool_id, $inputs);
+                        $output = $this->tools_registry->execute($tool_id, $inputs, $context);
                     }
                     break;
                     
@@ -487,6 +453,95 @@ class Executor {
     }
     
     /**
+     * Resolve template string with variables (supports {{variable}}, {{node_id.field}}, {{node_id.array[0].field}})
+     *
+     * @param string $template Template string
+     * @param array $context Execution context
+     * @return string Resolved string
+     */
+    private function resolve_template($template, $context) {
+        if (empty($template) || !is_string($template)) {
+            return $template;
+        }
+        
+        // Find all {{variable}} patterns
+        if (preg_match_all('/\{\{([^}]+)\}\}/', $template, $matches)) {
+            $resolved = $template;
+            foreach ($matches[1] as $match) {
+                $var_path = trim($match);
+                $var_value = $this->resolve_variable_path($var_path, $context);
+                
+                // Convert to string for replacement
+                if (is_array($var_value)) {
+                    $var_value = json_encode($var_value);
+                } elseif (is_object($var_value)) {
+                    $var_value = json_encode($var_value);
+                } elseif ($var_value === null) {
+                    $var_value = '';
+                } else {
+                    $var_value = (string)$var_value;
+                }
+                
+                $resolved = str_replace('{{' . $match . '}}', $var_value, $resolved);
+            }
+            return $resolved;
+        }
+        
+        return $template;
+    }
+    
+    /**
+     * Resolve a variable path (supports dots and array brackets)
+     * Examples: trigger_data.content, node_123.decision, node_123.results[0].status
+     *
+     * @param string $path Variable path
+     * @param array $context Execution context
+     * @return mixed Resolved value or null
+     */
+    private function resolve_variable_path($path, $context) {
+        $var_value = $context;
+        $remaining_path = trim($path);
+        
+        // Parse path token by token (handles both dots and brackets)
+        while (!empty($remaining_path)) {
+            // Check for array bracket pattern: key[index]
+            if (preg_match('/^([a-zA-Z0-9_]+)\[(\d+)\](.*)$/', $remaining_path, $array_match)) {
+                $key = $array_match[1];
+                $index = (int)$array_match[2];
+                $remaining_path = ltrim($array_match[3], '.');
+                
+                // Access array element
+                if (is_array($var_value) && isset($var_value[$key]) && is_array($var_value[$key])) {
+                    if (isset($var_value[$key][$index])) {
+                        $var_value = $var_value[$key][$index];
+                    } else {
+                        return null;
+                    }
+                } else {
+                    return null;
+                }
+            } 
+            // Check for simple key access: key or key.field
+            elseif (preg_match('/^([a-zA-Z0-9_]+)(.*)$/', $remaining_path, $key_match)) {
+                $key = $key_match[1];
+                $remaining_path = ltrim($key_match[2], '.');
+                
+                // Access key
+                if (is_array($var_value) && isset($var_value[$key])) {
+                    $var_value = $var_value[$key];
+                } else {
+                    return null;
+                }
+            } else {
+                // Invalid path format
+                return null;
+            }
+        }
+        
+        return $var_value;
+    }
+    
+    /**
      * Resolve a value from context (supports template syntax)
      *
      * @param string $expression Expression to resolve
@@ -498,16 +553,7 @@ class Executor {
         if (preg_match_all('/\{\{([^}]+)\}\}/', $expression, $matches)) {
             $resolved = $expression;
             foreach ($matches[1] as $match) {
-                $parts = explode('.', trim($match));
-                $var_value = $context;
-                foreach ($parts as $part) {
-                    if (is_array($var_value) && isset($var_value[$part])) {
-                        $var_value = $var_value[$part];
-                    } else {
-                        $var_value = null;
-                        break;
-                    }
-                }
+                $var_value = $this->resolve_variable_path(trim($match), $context);
                 $resolved = str_replace('{{' . $match . '}}', $var_value ?? '', $resolved);
             }
             // If entire expression was a template, return the resolved value
@@ -517,17 +563,8 @@ class Executor {
             return $resolved;
         }
         
-        // Direct field access
-        $parts = explode('.', $expression);
-        $var_value = $context;
-        foreach ($parts as $part) {
-            if (is_array($var_value) && isset($var_value[$part])) {
-                $var_value = $var_value[$part];
-            } else {
-                return null;
-            }
-        }
-        
+        // Direct field access (legacy support)
+        $var_value = $this->resolve_variable_path($expression, $context);
         return $var_value;
     }
     
@@ -559,7 +596,7 @@ class Executor {
             if ($condition_decision === $decision) {
                 $tool_id = $condition['then'];
                 $inputs = ['comment_id' => $context['trigger_data']['comment_id']];
-                return $this->tools_registry->execute($tool_id, $inputs);
+                return $this->tools_registry->execute($tool_id, $inputs, $context);
             }
         }
         

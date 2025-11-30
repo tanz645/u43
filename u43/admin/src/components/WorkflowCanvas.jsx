@@ -59,6 +59,8 @@ export default function WorkflowCanvas() {
           triggerType: data.triggerType,
           agentId: data.agentId,
           toolId: data.toolId,
+          category: data.category,
+          icon: data.icon,
         };
         
         const newNode = addNode(data.type, position, nodeData);

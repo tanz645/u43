@@ -248,59 +248,51 @@ This document outlines a phased development plan to build the WordPress Agentic 
 
 ### Goals
 - Improve workflow builder UX
-- Add more node types
-- Add condition/decision nodes
 - Better data flow visualization
 
 ### Tasks
 
-#### 3.1 Condition Nodes
-- [ ] Condition node type
-- [ ] If/Else branching
-- [ ] Multiple condition operators (equals, contains, greater than, etc.)
-- [ ] Visual branching in canvas
-- [ ] Condition evaluation logic in executor
+#### 3.1 Connection System
+- [ ] Connection highlighting on hover
 
 #### 3.2 Data Flow Visualization
 - [ ] Show data flowing through connections
 - [ ] Data preview on hover
-- [ ] Variable/expression editor
-- [ ] Template syntax ({{variable_name}})
 - [ ] Data type indicators
 
-#### 3.3 Node Improvements
-- [ ] Node status indicators (success, error, running)
-- [ ] Node execution time display
-- [ ] Node error messages
-- [ ] Node validation warnings
-- [ ] Node grouping/collapsing
+#### 3.3 Node Palette
+- [ ] Search/filter nodes
 
-#### 3.4 Workflow Execution UI
+#### 3.5 Workflow Execution UI
 - [ ] Test workflow button
-- [ ] Execution progress indicator
-- [ ] Real-time node execution status
-- [ ] Execution logs viewer
-- [ ] Execution history
-
-#### 3.5 Workflow Templates
-- [ ] Pre-built workflow templates
-- [ ] Template gallery
-- [ ] Import/export workflows (JSON)
-- [ ] Duplicate workflow
 
 #### 3.6 Advanced Features
-- [ ] Workflow versioning
-- [ ] Workflow comments/notes
-- [ ] Workflow tags/categories
 - [ ] Workflow search/filter
 - [ ] Bulk operations
 
+#### 3.7 Workflow Listing
+- [ ] Publish/unpublish from the action button
+- [ ] delete button should be in red
+
 ### Deliverables
-- ✅ Condition nodes work with branching
 - ✅ Data flow is visible and understandable
 - ✅ Workflow execution can be tested visually
-- ✅ Workflow templates available
 - ✅ Enhanced UX and polish
+- ✅ Easily Search and filter different types of nodes
+- ✅ Easily search and filter workflow
+
+---
+
+## Phase 2.9: WhatsApp Integration (Priority)
+
+See [WhatsApp Integration Development Plan](../integrations/whatsapp/DEVELOPMENT_PLAN.md) for detailed implementation plan.
+
+**Quick Summary:**
+- Multiple authentication methods (phone number, QR code, webhook)
+- Comprehensive triggers for WhatsApp events (messages, contacts, groups)
+- Extensive actions for messaging and group management
+- WhatsApp nodes grouped with WhatsApp icon in node palette
+- Estimated timeline: 4 weeks
 
 ---
 

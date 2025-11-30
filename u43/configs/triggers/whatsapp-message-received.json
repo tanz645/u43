@@ -1,0 +1,52 @@
+{
+  "id": "whatsapp_message_received",
+  "name": "WhatsApp Message Received",
+  "description": "Triggers when a new message is received via WhatsApp",
+  "version": "1.0.0",
+  "category": "whatsapp",
+  "icon": "whatsapp",
+  "outputs": {
+    "message_id": {
+      "type": "string",
+      "label": "Message ID"
+    },
+    "from": {
+      "type": "string",
+      "label": "Sender Phone Number"
+    },
+    "from_name": {
+      "type": "string",
+      "label": "Sender Name"
+    },
+    "to": {
+      "type": "string",
+      "label": "Recipient Phone Number"
+    },
+    "phone_number_id": {
+      "type": "string",
+      "label": "Phone Number ID"
+    },
+    "message_text": {
+      "type": "string",
+      "label": "Message Text"
+    },
+    "message_type": {
+      "type": "string",
+      "label": "Message Type"
+    },
+    "timestamp": {
+      "type": "integer",
+      "label": "Timestamp"
+    },
+    "media_url": {
+      "type": "string",
+      "label": "Media URL"
+    },
+    "media_type": {
+      "type": "string",
+      "label": "Media Type"
+    }
+  },
+  "handler": "U43\\Triggers\\WhatsApp\\Message_Received_Trigger"
+}
+

@@ -1,0 +1,92 @@
+{
+  "id": "whatsapp",
+  "name": "WhatsApp",
+  "description": "WhatsApp messaging and automation integration",
+  "version": "1.0.0",
+  "icon": "whatsapp",
+  "authentication": {
+    "type": "multi_method",
+    "methods": [
+      {
+        "id": "phone_token",
+        "name": "Phone Number + API Token",
+        "type": "api_key",
+        "header_name": "Authorization",
+        "header_format": "Bearer {api_token}",
+        "storage": "encrypted"
+      },
+      {
+        "id": "qr_code",
+        "name": "QR Code",
+        "type": "session",
+        "storage": "encrypted"
+      },
+      {
+        "id": "webhook_business",
+        "name": "Webhook + Business ID",
+        "type": "webhook",
+        "storage": "encrypted"
+      }
+    ]
+  },
+  "inputs": {
+    "phone_number": {
+      "type": "string",
+      "required": false,
+      "label": "Phone Number",
+      "description": "WhatsApp phone number (with country code, e.g., +1234567890)",
+      "sensitive": false
+    },
+    "api_token": {
+      "type": "string",
+      "required": false,
+      "label": "API Token",
+      "description": "WhatsApp Business API access token",
+      "sensitive": true
+    },
+    "business_id": {
+      "type": "string",
+      "required": false,
+      "label": "Business ID",
+      "description": "WhatsApp Business Account ID",
+      "sensitive": false
+    },
+    "webhook_url": {
+      "type": "string",
+      "required": false,
+      "label": "Webhook URL",
+      "description": "Webhook URL for receiving WhatsApp events",
+      "sensitive": false
+    },
+    "webhook_verify_token": {
+      "type": "string",
+      "required": false,
+      "label": "Webhook Verify Token",
+      "description": "Token for webhook verification",
+      "sensitive": true
+    },
+    "qr_code_session": {
+      "type": "string",
+      "required": false,
+      "label": "QR Code Session",
+      "description": "QR code session data",
+      "sensitive": true
+    }
+  },
+  "triggers": [
+    "whatsapp_message_received"
+  ],
+  "tools": [
+    "whatsapp_send_message"
+  ],
+  "api_base_url": "https://graph.facebook.com/v18.0",
+  "settings": {
+    "timeout": 30,
+    "rate_limit": {
+      "messages_per_second": 1,
+      "messages_per_minute": 20
+    }
+  }
+}
+
+

@@ -21,6 +21,26 @@ export const useWorkflowStore = create((set, get) => ({
   showConfigPanel: false,
   showNodePalette: true,
   
+  // Tool configs cache (loaded from node-types endpoint)
+  toolConfigs: {},
+  triggerConfigs: {},
+  agentConfigs: {},
+  
+  // Set tool configs
+  setToolConfigs: (configs) => {
+    set({ toolConfigs: configs });
+  },
+  
+  // Set trigger configs
+  setTriggerConfigs: (configs) => {
+    set({ triggerConfigs: configs });
+  },
+  
+  // Set agent configs
+  setAgentConfigs: (configs) => {
+    set({ agentConfigs: configs });
+  },
+  
   // Actions
   setWorkflow: (workflow) => {
     const workflowData = workflow.workflow_data || {};
@@ -203,6 +223,8 @@ export const useWorkflowStore = create((set, get) => ({
           label: label,
         nodeType: nodeType,
           config: config,
+          category: nodeData?.category,
+          icon: nodeData?.icon,
       },
     };
     

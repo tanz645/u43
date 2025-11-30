@@ -15,6 +15,7 @@ This document provides an overview of integrations. For detailed documentation o
 
 ### Collaboration Tools
 - **[Slack](integrations/collaboration/slack.md)** - Team communication and notifications
+- **[WhatsApp](integrations/whatsapp/index.md)** - WhatsApp messaging and automation (🚧 In Development)
 
 ### Google Integrations
 - **[Google APIs](integrations/google/index.md)** - Drive, Docs, Sheets, Calendar, Gmail integration (🚧 In Development)
@@ -94,6 +95,35 @@ All integrations follow the same configuration pattern:
 2. **Handler Classes**: PHP classes implement the business logic
 3. **Auto-Discovery**: Configurations are automatically discovered and registered
 4. **Consistent Pattern**: Same structure across all integrations
+5. **Modular Admin Handlers**: Each integration can have its own admin handler class for AJAX requests and admin-specific functionality
+
+## Admin Handler Architecture
+
+The plugin uses a modular handler architecture for admin-side functionality:
+
+- **Location**: `/admin/handlers/class-{integration}-handler.php`
+- **Namespace**: `U43\Admin\Handlers\{Integration}_Handler`
+- **Auto-Loading**: Handlers are automatically discovered and loaded
+- **Pattern**: Follow the naming convention `class-{integration}-handler.php`
+
+### Example Handler Structure
+
+```php
+namespace U43\Admin\Handlers;
+
+class WhatsApp_Handler {
+    public function __construct() {
+        // Register AJAX actions
+        add_action('wp_ajax_u43_test_whatsapp_connection', [$this, 'ajax_test_connection']);
+    }
+    
+    public function ajax_test_connection() {
+        // Handler implementation
+    }
+}
+```
+
+This modular approach allows each integration to manage its own admin functionality independently, making the codebase more scalable and maintainable.
 
 ## Configuration Compatibility
 

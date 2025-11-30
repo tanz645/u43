@@ -16,6 +16,63 @@ class Admin {
         add_action('admin_menu', [$this, 'add_admin_menu']);
         add_action('admin_enqueue_scripts', [$this, 'enqueue_scripts']);
         add_action('admin_init', [$this, 'handle_form_submissions']);
+        
+        // Load integration handlers (modular architecture)
+        $this->load_handlers();
+    }
+    
+    /**
+     * Load integration handlers
+     * This allows each integration to have its own handler class
+     * Follows a modular architecture pattern for scalability
+     */
+    private function load_handlers() {
+        $handlers_dir = U43_PLUGIN_DIR . 'admin/handlers/';
+        
+        if (!is_dir($handlers_dir)) {
+            return;
+        }
+        
+        // Get all handler files matching the pattern: class-*-handler.php
+        $handler_files = glob($handlers_dir . 'class-*-handler.php');
+        
+        foreach ($handler_files as $handler_file) {
+            // Require the file first to ensure class is loaded
+            require_once $handler_file;
+            
+            // Get handler class name from file path
+            $handler_class = $this->get_handler_class_name($handler_file);
+            
+            // Instantiate the handler class if it exists
+            if ($handler_class && class_exists($handler_class)) {
+                new $handler_class();
+            }
+        }
+    }
+    
+    /**
+     * Get handler class name from file path
+     *
+     * @param string $file_path File path
+     * @return string|null Class name or null if not found
+     */
+    private function get_handler_class_name($file_path) {
+        $filename = basename($file_path, '.php');
+        
+        // Convert filename to class name
+        // e.g., class-whatsapp-handler.php -> U43\Admin\Handlers\WhatsApp_Handler
+        $parts = explode('-', $filename);
+        array_shift($parts); // Remove 'class'
+        array_pop($parts); // Remove 'handler'
+        
+        // Convert to PascalCase with underscores
+        $class_name = '';
+        foreach ($parts as $part) {
+            $class_name .= ucfirst($part) . '_';
+        }
+        $class_name = rtrim($class_name, '_') . '_Handler';
+        
+        return 'U43\\Admin\\Handlers\\' . $class_name;
     }
     
     /**
@@ -326,6 +383,7 @@ class Admin {
      * Render settings
      */
     public function render_settings() {
+        // Handle OpenAI settings
         if (isset($_POST['u43_save_settings']) && check_admin_referer('u43_settings')) {
             $api_key = sanitize_text_field($_POST['openai_api_key'] ?? '');
             // Save even if empty (allows clearing the key)
@@ -337,7 +395,30 @@ class Admin {
             }
         }
         
+        // Handle WhatsApp settings
+        if (isset($_POST['u43_save_whatsapp_settings']) && check_admin_referer('u43_whatsapp_settings')) {
+            $phone_number = sanitize_text_field($_POST['whatsapp_phone_number'] ?? '');
+            $phone_number_id = sanitize_text_field($_POST['whatsapp_phone_number_id'] ?? '');
+            $api_token = sanitize_text_field($_POST['whatsapp_api_token'] ?? '');
+            $business_id = sanitize_text_field($_POST['whatsapp_business_id'] ?? '');
+            $webhook_url = esc_url_raw($_POST['whatsapp_webhook_url'] ?? '');
+            $webhook_verify_token = sanitize_text_field($_POST['whatsapp_webhook_verify_token'] ?? '');
+            $auth_method = sanitize_text_field($_POST['whatsapp_auth_method'] ?? 'phone_token');
+            
+            // Save settings
+            update_option('u43_whatsapp_phone_number', $phone_number);
+            update_option('u43_whatsapp_phone_number_id', $phone_number_id);
+            update_option('u43_whatsapp_api_token', $api_token);
+            update_option('u43_whatsapp_business_id', $business_id);
+            update_option('u43_whatsapp_webhook_url', $webhook_url);
+            update_option('u43_whatsapp_webhook_verify_token', $webhook_verify_token);
+            update_option('u43_whatsapp_auth_method', $auth_method);
+            
+            echo '<div class="notice notice-success"><p>' . esc_html__('WhatsApp settings saved!', 'u43') . '</p></div>';
+        }
+        
         include U43_PLUGIN_DIR . 'admin/views/settings.php';
     }
+    
 }
 

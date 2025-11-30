@@ -35,6 +35,9 @@ spl_autoload_register(function ($class) {
     } elseif (count($parts) === 2 && $parts[0] === 'admin' && $parts[1] === 'class-admin') {
         // Admin class is in admin/ directory (U43\Admin\Admin)
         $file = U43_PLUGIN_DIR . 'admin' . DIRECTORY_SEPARATOR . 'class-admin.php';
+    } elseif (count($parts) === 3 && $parts[0] === 'admin' && $parts[1] === 'handlers') {
+        // Admin handlers are in admin/handlers/ directory (U43\Admin\Handlers\*)
+        $file = U43_PLUGIN_DIR . 'admin' . DIRECTORY_SEPARATOR . 'handlers' . DIRECTORY_SEPARATOR . $parts[2] . '.php';
     } elseif (count($parts) === 2 && $parts[0] === 'database' && $parts[1] === 'class-database') {
         // Database class is in database/ directory
         $file = U43_PLUGIN_DIR . 'database' . DIRECTORY_SEPARATOR . 'class-database.php';

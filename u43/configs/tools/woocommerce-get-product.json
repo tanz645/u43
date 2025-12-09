@@ -1,0 +1,118 @@
+{
+  "id": "woocommerce_get_product",
+  "name": "Get WooCommerce Product",
+  "description": "Retrieves detailed information about a WooCommerce product by product ID",
+  "version": "1.0.0",
+  "category": "woocommerce",
+  "icon": "woocommerce",
+  "inputs": {
+    "product_id": {
+      "type": "integer",
+      "required": true,
+      "label": "Product ID",
+      "description": "The ID of the WooCommerce product to retrieve",
+      "variable_name": "product_id",
+      "sensitive": false
+    },
+    "product_id_variable": {
+      "type": "string",
+      "required": false,
+      "label": "Product ID (from previous node)",
+      "description": "Variable name containing product ID from a previous node (e.g., {{trigger_data.product_id}})",
+      "sensitive": false
+    }
+  },
+  "outputs": {
+    "product_id": {
+      "type": "integer",
+      "label": "Product ID"
+    },
+    "product_name": {
+      "type": "string",
+      "label": "Product Name"
+    },
+    "product_sku": {
+      "type": "string",
+      "label": "Product SKU"
+    },
+    "product_price": {
+      "type": "string",
+      "label": "Product Price"
+    },
+    "product_regular_price": {
+      "type": "string",
+      "label": "Regular Price"
+    },
+    "product_sale_price": {
+      "type": "string",
+      "label": "Sale Price"
+    },
+    "product_type": {
+      "type": "string",
+      "label": "Product Type"
+    },
+    "product_status": {
+      "type": "string",
+      "label": "Product Status"
+    },
+    "product_url": {
+      "type": "string",
+      "label": "Product URL"
+    },
+    "product_image_url": {
+      "type": "string",
+      "label": "Product Image URL"
+    },
+    "product_description": {
+      "type": "string",
+      "label": "Product Description"
+    },
+    "product_short_description": {
+      "type": "string",
+      "label": "Product Short Description"
+    },
+    "product_stock_status": {
+      "type": "string",
+      "label": "Stock Status"
+    },
+    "product_stock_quantity": {
+      "type": "integer",
+      "label": "Stock Quantity"
+    },
+    "product_manage_stock": {
+      "type": "boolean",
+      "label": "Manage Stock"
+    },
+    "product_weight": {
+      "type": "string",
+      "label": "Product Weight"
+    },
+    "product_dimensions": {
+      "type": "object",
+      "label": "Product Dimensions"
+    },
+    "product_categories": {
+      "type": "array",
+      "label": "Product Categories"
+    },
+    "product_tags": {
+      "type": "array",
+      "label": "Product Tags"
+    },
+    "product_author": {
+      "type": "integer",
+      "label": "Product Author ID"
+    },
+    "product_created_date": {
+      "type": "string",
+      "label": "Product Created Date"
+    },
+    "product_modified_date": {
+      "type": "string",
+      "label": "Product Modified Date"
+    }
+  },
+  "handler": "U43\\Tools\\WooCommerce\\Get_Product",
+  "permissions": []
+}
+

@@ -44,6 +44,23 @@ export const WordPressIcon = ({ className = "w-5 h-5" }) => (
 );
 
 /**
+ * WooCommerce Icon Component
+ * WooCommerce logo (simplified version)
+ */
+export const WooCommerceIcon = ({ className = "w-5 h-5" }) => (
+  <svg 
+    className={className} 
+    viewBox="0 0 24 24" 
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" fill="#96588a"/>
+    <path d="M12 6c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6-2.69-6-6-6zm0 10c-2.21 0-4-1.79-4-4s1.79-4 4-4 4 1.79 4 4-1.79 4-4 4z" fill="#96588a"/>
+    <circle cx="12" cy="12" r="2" fill="#96588a"/>
+  </svg>
+);
+
+/**
  * Icon mapping for API icon strings to emojis/components
  * 
  * Special markers (like 'whatsapp-icon') indicate custom React components
@@ -64,6 +81,7 @@ export const iconMap = {
   // Communication icons
   'email': '📧',
   'whatsapp': 'whatsapp-icon', // Custom SVG component
+  'woocommerce': 'woocommerce-icon', // Custom SVG component
   
   // Action/Tool icons
   'check': '✓',
@@ -92,6 +110,10 @@ export const renderIcon = (icon, category = null) => {
   
   if (category === 'WordPress' || category === 'wordpress') {
     return <WordPressIcon className="w-7 h-7 text-blue-600" style={{ minWidth: '28px', minHeight: '28px' }} />;
+  }
+  
+  if (category === 'WooCommerce' || category === 'woocommerce' || icon === 'woocommerce-icon') {
+    return <WooCommerceIcon className="w-7 h-7 text-purple-600" style={{ minWidth: '28px', minHeight: '28px' }} />;
   }
   
   // Handle emoji icons

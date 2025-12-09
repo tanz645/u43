@@ -10,12 +10,16 @@ function transformApiNodes(apiData) {
   // Transform triggers
   if (apiData.triggers) {
     Object.entries(apiData.triggers).forEach(([id, trigger]) => {
-      // Determine category based on ID
-      let category = 'General';
-      if (id.startsWith('whatsapp_')) {
-        category = 'WhatsApp';
-      } else if (id.startsWith('wordpress_')) {
-        category = 'WordPress';
+      // Use category from config if available, otherwise determine from ID
+      let category = trigger.category || 'General';
+      if (!trigger.category) {
+        if (id.startsWith('whatsapp_')) {
+          category = 'WhatsApp';
+        } else if (id.startsWith('wordpress_')) {
+          category = 'WordPress';
+        } else if (id.startsWith('woocommerce_')) {
+          category = 'WooCommerce';
+        }
       }
       
       nodes.push({
@@ -23,7 +27,7 @@ function transformApiNodes(apiData) {
         nodeId: id,
         label: trigger.name || id,
         description: trigger.description || '',
-        icon: iconMap[trigger.icon] || iconMap.default,
+        icon: trigger.icon || 'default', // Use original icon value, renderIcon will handle it
         category: category,
         nodeType: 'trigger',
         triggerType: id,
@@ -56,6 +60,8 @@ function transformApiNodes(apiData) {
         category = 'WhatsApp';
       } else if (id.startsWith('wordpress_')) {
         category = 'WordPress';
+      } else if (id.startsWith('woocommerce_')) {
+        category = 'WooCommerce';
       }
       
       nodes.push({
@@ -63,7 +69,7 @@ function transformApiNodes(apiData) {
         nodeId: id,
         label: tool.name || id,
         description: tool.description || '',
-        icon: iconMap[tool.icon] || '⚙️',
+        icon: tool.icon || 'default', // Use original icon value, renderIcon will handle it
         category: category,
         nodeType: 'action',
         toolId: id,

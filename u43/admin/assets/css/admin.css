@@ -26,3 +26,46 @@
     margin-left: 20px;
 }
 
+/* Workflow list action buttons spacing */
+.wp-list-table td .button,
+.wp-list-table td .button.button-small {
+    display: inline-block;
+    margin: 6px 4px 6px 0 !important;
+    vertical-align: middle;
+}
+
+.wp-list-table td form {
+    display: inline-block;
+    margin: 6px 4px 6px 0 !important;
+    vertical-align: middle;
+}
+
+.wp-list-table td form .button,
+.wp-list-table td form .button.button-small {
+    margin: 0 !important;
+}
+
+/* Delete button styling - red color */
+.wp-list-table td .button.delete,
+.wp-list-table td button.delete,
+.wp-list-table td .button.button-small.delete,
+.wp-list-table td form button.delete,
+.wp-list-table td form .button.delete {
+    color: #b32d2e !important;
+    border-color: #b32d2e !important;
+    background: #fff !important;
+    text-decoration: none !important;
+    box-shadow: 0 0 0 1px #b32d2e inset !important;
+}
+
+.wp-list-table td .button.delete:hover,
+.wp-list-table td button.delete:hover,
+.wp-list-table td .button.button-small.delete:hover,
+.wp-list-table td form button.delete:hover,
+.wp-list-table td form .button.delete:hover {
+    color: #8a2424 !important;
+    border-color: #8a2424 !important;
+    background: #fcf0f1 !important;
+    box-shadow: 0 0 0 1px #8a2424 inset !important;
+}
+

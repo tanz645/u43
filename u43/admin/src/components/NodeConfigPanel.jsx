@@ -296,11 +296,11 @@ export default function NodeConfigPanel() {
               
               {/* Show connected nodes for variable suggestions */}
               {connectedSourceNodes.length > 0 && (
-                <div className="mb-3 p-3 bg-green-50 border border-green-200 rounded-md">
+                <div className="mb-3 p-3 bg-green-50 border border-green-200 rounded-md max-w-full overflow-hidden">
                   <p className="text-xs font-semibold text-green-900 mb-2 flex items-center gap-1">
                     <span>✓</span> Connected Nodes - Click to insert variable:
                   </p>
-                  <div className="space-y-2">
+                  <div className="space-y-2 max-h-64 overflow-y-auto overflow-x-hidden pr-1">
                     {connectedSourceNodes.map((sourceNode) => {
                       const nodeId = sourceNode.id;
                       const nodeType = sourceNode.data.nodeType;
@@ -312,12 +312,14 @@ export default function NodeConfigPanel() {
                           { 
                             label: 'Decision', 
                             description: 'The decision made (yes, no, maybe, etc.)',
-                            value: `{{${nodeId}.decision}}` 
+                            value: `{{${nodeId}.decision}}`,
+                            displayValue: `{{node.decision}}`
                           },
                           { 
                             label: 'Reasoning', 
                             description: 'The explanation for the decision',
-                            value: `{{${nodeId}.reasoning}}` 
+                            value: `{{${nodeId}.reasoning}}`,
+                            displayValue: `{{node.reasoning}}`
                           },
                         ];
                       } else if (nodeType === 'trigger') {
@@ -365,7 +367,8 @@ export default function NodeConfigPanel() {
                             suggestions = Object.entries(toolConfig.outputs).map(([key, output]) => ({
                               label: output.label || key,
                               description: `Type: ${output.type || 'string'}`,
-                              value: `{{${nodeId}.${key}}}`
+                              value: `{{${nodeId}.${key}}}`,
+                              displayValue: `{{node.${key}}}`
                             }));
                           }
                         }
@@ -375,16 +378,17 @@ export default function NodeConfigPanel() {
                           { 
                             label: 'Output', 
                             description: 'The output from this node',
-                            value: `{{${nodeId}}}` 
+                            value: `{{${nodeId}}}`,
+                            displayValue: `{{node}}`
                           },
                         ];
                       }
                       
                       return (
-                        <div key={nodeId} className="bg-white rounded p-2 border border-green-100">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="text-xs font-semibold text-green-900">{nodeLabel}</span>
-                            <span className="text-xs text-gray-500">({nodeType})</span>
+                        <div key={nodeId} className="bg-white rounded p-2 border border-green-100 max-w-full overflow-hidden">
+                          <div className="flex items-center gap-2 mb-1 min-w-0">
+                            <span className="text-xs font-semibold text-green-900 truncate">{nodeLabel}</span>
+                            <span className="text-xs text-gray-500 flex-shrink-0">({nodeType})</span>
                           </div>
                           <div className="space-y-1">
                             {suggestions.map((suggestion, idx) => (
@@ -406,18 +410,21 @@ export default function NodeConfigPanel() {
                                     }
                                   }, 0);
                                 }}
-                                className="block w-full text-left p-1.5 rounded hover:bg-blue-50 transition-colors group"
+                                className="block w-full text-left p-1.5 rounded hover:bg-blue-50 transition-colors group min-w-0"
                                 title={suggestion.description}
                               >
-                                <div>
-                                  <span className="text-xs font-medium text-blue-700 group-hover:text-blue-900">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <span className="text-xs font-medium text-blue-700 group-hover:text-blue-900 truncate">
                                     {suggestion.label}
                                   </span>
-                                  <span className="text-xs text-gray-500 ml-2 font-mono">
-                                    {suggestion.value}
+                                  <span 
+                                    className="text-xs text-gray-500 font-mono truncate"
+                                    title={suggestion.value}
+                                  >
+                                    {suggestion.displayValue || suggestion.value}
                                   </span>
                                 </div>
-                                <div className="text-xs text-gray-500 mt-0.5">
+                                <div className="text-xs text-gray-500 mt-0.5 truncate">
                                   {suggestion.description}
                                 </div>
                               </button>
@@ -477,11 +484,11 @@ export default function NodeConfigPanel() {
               
               {/* Show connected nodes */}
               {connectedSourceNodes.length > 0 && (
-                <div className="mb-3 p-3 bg-green-50 border border-green-200 rounded-md">
+                <div className="mb-3 p-3 bg-green-50 border border-green-200 rounded-md max-w-full overflow-hidden">
                   <p className="text-xs font-semibold text-green-900 mb-2 flex items-center gap-1">
                     <span>✓</span> Connected Nodes - Click to use:
                   </p>
-                  <div className="space-y-2">
+                  <div className="space-y-2 max-h-64 overflow-y-auto overflow-x-hidden pr-1">
                     {connectedSourceNodes.map((sourceNode) => {
                       const nodeId = sourceNode.id;
                       const nodeType = sourceNode.data.nodeType;
@@ -536,10 +543,10 @@ export default function NodeConfigPanel() {
                       }
                       
                       return (
-                        <div key={nodeId} className="bg-white rounded p-2 border border-green-100">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="text-xs font-semibold text-green-900">{nodeLabel}</span>
-                            <span className="text-xs text-gray-500">({nodeType})</span>
+                        <div key={nodeId} className="bg-white rounded p-2 border border-green-100 max-w-full overflow-hidden">
+                          <div className="flex items-center gap-2 mb-1 min-w-0">
+                            <span className="text-xs font-semibold text-green-900 truncate">{nodeLabel}</span>
+                            <span className="text-xs text-gray-500 flex-shrink-0">({nodeType})</span>
                           </div>
                           <div className="space-y-1">
                             {suggestions.map((suggestion, idx) => (
@@ -547,14 +554,14 @@ export default function NodeConfigPanel() {
                                 key={idx}
                                 type="button"
                                 onClick={() => setConfig({ ...config, field: suggestion.value })}
-                                className="block w-full text-left p-1.5 rounded hover:bg-blue-50 transition-colors group"
+                                className="block w-full text-left p-1.5 rounded hover:bg-blue-50 transition-colors group min-w-0"
                                 title={suggestion.description}
                               >
-                                <div>
-                                  <span className="text-xs font-medium text-blue-700 group-hover:text-blue-900">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <span className="text-xs font-medium text-blue-700 group-hover:text-blue-900 truncate">
                                     {suggestion.label}
                                   </span>
-                                  <span className="text-xs text-gray-500 ml-2">
+                                  <span className="text-xs text-gray-500 truncate">
                                     {suggestion.description}
                                   </span>
                                 </div>
@@ -649,46 +656,37 @@ export default function NodeConfigPanel() {
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Action Type
             </label>
-            <select
-              value={config.actionType || config.tool_id || ''}
-              onChange={(e) => {
-                const actionType = e.target.value;
-                // Map actionType to tool_id
-                const toolIdMap = {
-                  'approve_comment': 'wordpress_approve_comment',
-                  'spam_comment': 'wordpress_spam_comment',
-                  'delete_comment': 'wordpress_delete_comment',
-                  'send_email': 'wordpress_send_email',
-                  'whatsapp_send_message': 'whatsapp_send_message',
-                };
-                const tool_id = toolIdMap[actionType] || actionType;
-                const newConfig = { 
-                  ...config, 
-                  actionType: actionType,
-                  tool_id: tool_id, // Set tool_id for executor
-                };
-                setConfig(newConfig);
-                
-                // Fetch tool config when tool is selected
-                if (tool_id) {
-                  fetchToolConfig(tool_id);
-                } else {
-                  setToolConfig(null);
-                }
-              }}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">Select action...</option>
-              <option value="approve_comment">Approve Comment</option>
-              <option value="spam_comment">Spam Comment</option>
-              <option value="delete_comment">Delete Comment</option>
-              <option value="send_email">Send Email</option>
-              <option value="whatsapp_send_message">Send WhatsApp Message</option>
-            </select>
-            {config.tool_id && (
-              <p className="text-xs text-gray-500 mt-1">
-                Tool ID: {config.tool_id}
-              </p>
+            {toolConfig ? (
+              <div className="px-3 py-2 bg-gray-50 border border-gray-300 rounded-md">
+                <p className="text-sm text-gray-900 font-medium">
+                  {toolConfig.name || config.tool_id || 'Unknown Action'}
+                </p>
+                {toolConfig.description && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    {toolConfig.description}
+                  </p>
+                )}
+                {config.tool_id && (
+                  <p className="text-xs text-gray-400 mt-1">
+                    ID: {config.tool_id}
+                  </p>
+                )}
+              </div>
+            ) : config.tool_id ? (
+              <div className="px-3 py-2 bg-gray-50 border border-gray-300 rounded-md">
+                <p className="text-sm text-gray-900 font-medium">
+                  {config.tool_id.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                </p>
+                <p className="text-xs text-gray-400 mt-1">
+                  ID: {config.tool_id}
+                </p>
+              </div>
+            ) : (
+              <div className="px-3 py-2 bg-gray-50 border border-gray-300 rounded-md">
+                <p className="text-sm text-gray-500 italic">
+                  No action selected
+                </p>
+              </div>
             )}
             
             {/* Render tool inputs dynamically */}

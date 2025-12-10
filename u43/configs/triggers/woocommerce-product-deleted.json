@@ -1,0 +1,56 @@
+{
+  "id": "woocommerce_product_deleted",
+  "name": "WooCommerce Product Deleted",
+  "description": "Triggers when a product is deleted in WooCommerce",
+  "version": "1.0.0",
+  "category": "woocommerce",
+  "icon": "woocommerce",
+  "outputs": {
+    "product_id": {
+      "type": "integer",
+      "label": "Product ID"
+    },
+    "product_name": {
+      "type": "string",
+      "label": "Product Name"
+    },
+    "product_sku": {
+      "type": "string",
+      "label": "Product SKU"
+    },
+    "product_price": {
+      "type": "string",
+      "label": "Product Price"
+    },
+    "product_type": {
+      "type": "string",
+      "label": "Product Type"
+    },
+    "product_status": {
+      "type": "string",
+      "label": "Product Status"
+    },
+    "product_url": {
+      "type": "string",
+      "label": "Product URL"
+    },
+    "product_author": {
+      "type": "integer",
+      "label": "Product Author ID"
+    },
+    "product_created_date": {
+      "type": "string",
+      "label": "Product Created Date"
+    },
+    "product_modified_date": {
+      "type": "string",
+      "label": "Product Modified Date"
+    },
+    "deleted_date": {
+      "type": "string",
+      "label": "Product Deleted Date"
+    }
+  },
+  "handler": "U43\\Triggers\\WooCommerce\\Product_Deleted_Trigger"
+}
+

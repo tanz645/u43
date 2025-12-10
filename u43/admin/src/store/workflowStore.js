@@ -125,8 +125,10 @@ export const useWorkflowStore = create((set, get) => ({
           let suggestedField = '';
           
           if (sourceNodeType === 'agent') {
-            // For agent nodes, suggest common output fields
-            suggestedField = `{{${connection.source}.decision}}`;
+            // For agent nodes, use the sourceHandle (output field) if specified
+            // Otherwise default to decision
+            const outputField = connection.sourceHandle || 'decision';
+            suggestedField = `{{${connection.source}.${outputField}}}`;
           } else if (sourceNodeType === 'trigger') {
             // For trigger nodes, suggest common trigger data fields
             suggestedField = `{{trigger_data.comment_id}}`;

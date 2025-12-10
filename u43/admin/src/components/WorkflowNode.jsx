@@ -152,6 +152,34 @@ export default function WorkflowNode({ id, data, selected }) {
   
   const hasOutputs = Object.keys(nodeOutputs).length > 0;
   
+  // Color mapping for different output types - returns both Tailwind class and hex color
+  const getOutputColor = (outputKey) => {
+    const colorMap = {
+      'decision': { class: 'bg-blue-500', hex: '#3b82f6' },
+      'reasoning': { class: 'bg-amber-500', hex: '#f59e0b' },
+      'true': { class: 'bg-green-500', hex: '#10b981' },
+      'false': { class: 'bg-red-500', hex: '#ef4444' },
+    };
+    
+    // Default colors for other outputs
+    const defaultColors = [
+      { class: 'bg-purple-500', hex: '#8b5cf6' },
+      { class: 'bg-pink-500', hex: '#ec4899' },
+      { class: 'bg-indigo-500', hex: '#6366f1' },
+      { class: 'bg-teal-500', hex: '#14b8a6' },
+      { class: 'bg-cyan-500', hex: '#06b6d4' },
+    ];
+    
+    if (colorMap[outputKey]) {
+      return colorMap[outputKey];
+    }
+    
+    // Use a default color based on index if not in map
+    const outputKeys = Object.keys(nodeOutputs || {});
+    const index = outputKeys.indexOf(outputKey);
+    return defaultColors[index % defaultColors.length] || { class: 'bg-gray-500', hex: '#6b7280' };
+  };
+  
   // Debug logging - log immediately when component renders
   useEffect(() => {
     console.log(`[WorkflowNode] Node ${id} - Type: ${nodeType}`, {
@@ -190,8 +218,13 @@ export default function WorkflowNode({ id, data, selected }) {
               {renderIcon(data.icon || iconMap[nodeType] || '⚙️', data.category)}
             </span>
           )}
-          {!data.category && (
-          <div className={`w-3 h-3 rounded-full flex-shrink-0 ${nodeTypeColors[nodeType] || 'bg-gray-500'}`} />
+          {!data.category && data.icon && (
+            <span className="flex-shrink-0">
+              {renderIcon(data.icon, null)}
+            </span>
+          )}
+          {!data.category && !data.icon && (
+            <div className={`w-3 h-3 rounded-full flex-shrink-0 ${nodeTypeColors[nodeType] || 'bg-gray-500'}`} />
           )}
           <div className="text-xs text-gray-500 flex-shrink-0">{nodeTypeLabels[nodeType]}</div>
           <button
@@ -251,6 +284,28 @@ export default function WorkflowNode({ id, data, selected }) {
             </div>
           </div>
         )}
+        {/* Show output color legend for agent nodes with multiple outputs */}
+        {nodeType === 'agent' && hasOutputs && Object.keys(nodeOutputs).length > 1 && (
+          <div className="mt-2 pt-2 border-t border-gray-200">
+            <div className="text-xs font-medium text-gray-700 mb-1.5">Output Colors:</div>
+            <div className="space-y-1">
+              {Object.entries(nodeOutputs).map(([outputKey, output]) => {
+                const colorInfo = getOutputColor(outputKey);
+                return (
+                  <div key={outputKey} className="flex items-center gap-2">
+                    <div 
+                      className="w-3 h-3 rounded-full border border-white flex-shrink-0" 
+                      style={{ backgroundColor: colorInfo.hex }}
+                    />
+                    <span className="text-xs text-gray-600">
+                      {output.label || outputKey}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
       
       {/* Output Preview Section - Always show for all nodes */}
@@ -286,26 +341,35 @@ export default function WorkflowNode({ id, data, selected }) {
           <div className="px-4 pb-3 bg-gray-50 border-t border-gray-200">
             <div className="space-y-2 pt-2">
               {Object.entries(nodeOutputs).length > 0 ? (
-                Object.entries(nodeOutputs).map(([key, output]) => (
-                  <div key={key} className="text-xs">
-                    <div className="flex items-start gap-2">
-                      <span className="font-mono text-blue-600 font-semibold flex-shrink-0">
-                        {key}
-                      </span>
-                      <span className="text-gray-500">:</span>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-gray-700 font-medium truncate" title={output.label || key}>
-                          {output.label || key}
-                        </div>
-                        {output.type && (
-                          <div className="text-gray-400 text-[10px] mt-0.5">
-                            {output.type}
-                          </div>
+                Object.entries(nodeOutputs).map(([key, output]) => {
+                  const colorInfo = nodeType === 'agent' ? getOutputColor(key) : { hex: '#9ca3af' };
+                  return (
+                    <div key={key} className="text-xs">
+                      <div className="flex items-start gap-2">
+                        {nodeType === 'agent' && (
+                          <div 
+                            className="w-2.5 h-2.5 rounded-full border border-white flex-shrink-0 mt-0.5" 
+                            style={{ backgroundColor: colorInfo.hex }}
+                          />
                         )}
+                        <span className="font-mono text-blue-600 font-semibold flex-shrink-0">
+                          {key}
+                        </span>
+                        <span className="text-gray-500">:</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-gray-700 font-medium truncate" title={output.label || key}>
+                            {output.label || key}
+                          </div>
+                          {output.type && (
+                            <div className="text-gray-400 text-[10px] mt-0.5">
+                              {output.type}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))
+                  );
+                })
               ) : (
                 <div className="text-xs text-gray-400 italic">
                   No outputs available. Configs may not be loaded yet.
@@ -318,7 +382,7 @@ export default function WorkflowNode({ id, data, selected }) {
         )}
       </div>
       
-      {/* Output Handles - Condition nodes have multiple outputs */}
+      {/* Output Handles - Condition nodes and Agent nodes have multiple outputs */}
       {nodeType === 'condition' ? (
         <>
           <Handle
@@ -337,6 +401,30 @@ export default function WorkflowNode({ id, data, selected }) {
             style={{ top: '70%' }}
             label="False"
           />
+        </>
+      ) : nodeType === 'agent' && hasOutputs ? (
+        <>
+          {Object.entries(nodeOutputs).map(([outputKey, output], index, arr) => {
+            // Calculate position: distribute handles evenly along the right side
+            const totalOutputs = arr.length;
+            const topPercentage = totalOutputs === 1 ? '50%' : `${30 + (index * (40 / (totalOutputs - 1)))}%`;
+            const colorInfo = getOutputColor(outputKey);
+            
+            return (
+              <Handle
+                key={outputKey}
+                type="source"
+                id={outputKey}
+                position={Position.Right}
+                className="!border-white"
+                style={{ 
+                  top: topPercentage,
+                  backgroundColor: colorInfo.hex 
+                }}
+                label={output.label || outputKey}
+              />
+            );
+          })}
         </>
       ) : (
       <Handle

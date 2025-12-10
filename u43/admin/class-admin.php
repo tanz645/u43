@@ -208,6 +208,12 @@ class Admin {
             case 'export_workflow':
                 $this->handle_export_workflow();
                 break;
+            case 'publish_workflow':
+                $this->handle_publish_workflow();
+                break;
+            case 'unpublish_workflow':
+                $this->handle_unpublish_workflow();
+                break;
         }
     }
     
@@ -342,6 +348,42 @@ class Admin {
             }
         }
         wp_die('Workflow not found');
+    }
+    
+    /**
+     * Handle publish workflow
+     */
+    private function handle_publish_workflow() {
+        $workflow_id = intval($_POST['workflow_id'] ?? 0);
+        if ($workflow_id) {
+            $flow_manager = U43()->get_flow_manager();
+            $result = $flow_manager->update_workflow($workflow_id, ['status' => 'published']);
+            
+            if ($result) {
+                wp_redirect(admin_url('admin.php?page=u43&message=published'));
+                exit;
+            }
+        }
+        wp_redirect(admin_url('admin.php?page=u43&message=publish_failed'));
+        exit;
+    }
+    
+    /**
+     * Handle unpublish workflow
+     */
+    private function handle_unpublish_workflow() {
+        $workflow_id = intval($_POST['workflow_id'] ?? 0);
+        if ($workflow_id) {
+            $flow_manager = U43()->get_flow_manager();
+            $result = $flow_manager->update_workflow($workflow_id, ['status' => 'draft']);
+            
+            if ($result) {
+                wp_redirect(admin_url('admin.php?page=u43&message=unpublished'));
+                exit;
+            }
+        }
+        wp_redirect(admin_url('admin.php?page=u43&message=unpublish_failed'));
+        exit;
     }
     
     /**

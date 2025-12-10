@@ -92,12 +92,17 @@ function transformApiNodes(apiData) {
 }
 
 export default function NodePalette() {
-  const { showNodePalette, toggleNodePalette, addNode } = useWorkflowStore();
+  const { showNodePalette, toggleNodePalette, addNode, nodes } = useWorkflowStore();
   const [nodeTypes, setNodeTypes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedCategories, setExpandedCategories] = useState({});
+  
+  // Get total node count from workflow
+  const totalNodeCount = nodes?.length || 0;
+  // Get total available nodes count (for searching/adding)
+  const totalAvailableNodes = nodeTypes?.length || 0;
   
   useEffect(() => {
     // Fetch node types from API
@@ -287,7 +292,17 @@ export default function NodePalette() {
   return (
     <div className="w-64 bg-white border-r border-gray-200 h-full overflow-y-auto flex-shrink-0 flex flex-col" style={{ height: '100%' }}>
       <div className="p-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
-        <h3 className="font-semibold text-gray-900">Nodes</h3>
+        <div className="flex flex-col">
+          <h3 className="font-semibold text-gray-900">Nodes</h3>
+          <div className="flex flex-col gap-0.5 mt-0.5">
+            <span className="text-xs text-gray-500">
+              {totalNodeCount} {totalNodeCount === 1 ? 'node' : 'nodes'} in workflow
+            </span>
+            <span className="text-xs text-gray-400">
+              {totalAvailableNodes} {totalAvailableNodes === 1 ? 'node' : 'nodes'} available
+            </span>
+          </div>
+        </div>
         <button
           onClick={toggleNodePalette}
           className="text-gray-500 hover:text-gray-700"

@@ -18,9 +18,6 @@ $workflows = $flow_manager->get_workflows(['limit' => 100]);
     <a href="<?php echo esc_url(admin_url('admin.php?page=u43-builder')); ?>" class="page-title-action">
         <?php esc_html_e('Workflow Builder', 'u43'); ?>
     </a>
-    <a href="<?php echo esc_url(admin_url('admin.php?page=u43-new')); ?>" class="page-title-action">
-        <?php esc_html_e('Add New', 'u43'); ?>
-    </a>
     <hr class="wp-header-end">
     
     <?php if (isset($_GET['message'])): ?>

@@ -100,15 +100,6 @@ class Admin {
         
         add_submenu_page(
             'u43',
-            __('Add New', 'u43'),
-            __('Add New', 'u43'),
-            'manage_options',
-            'u43-new',
-            [$this, 'render_workflow_form']
-        );
-        
-        add_submenu_page(
-            'u43',
             __('Workflow Builder', 'u43'),
             __('Workflow Builder', 'u43'),
             'manage_options',
@@ -193,9 +184,6 @@ class Admin {
         $action = sanitize_text_field($_POST['u43_action']);
         
         switch ($action) {
-            case 'create_workflow':
-                $this->handle_create_workflow();
-                break;
             case 'update_workflow':
                 $this->handle_update_workflow();
                 break;
@@ -214,63 +202,6 @@ class Admin {
             case 'unpublish_workflow':
                 $this->handle_unpublish_workflow();
                 break;
-        }
-    }
-    
-    /**
-     * Handle create workflow
-     */
-    private function handle_create_workflow() {
-        $flow_manager = U43()->get_flow_manager();
-        
-        $workflow_data = [
-            'title' => sanitize_text_field($_POST['title'] ?? 'Untitled Workflow'),
-            'description' => sanitize_textarea_field($_POST['description'] ?? ''),
-            'status' => sanitize_text_field($_POST['status'] ?? 'draft'),
-            'nodes' => [
-                [
-                    'id' => 'trigger_1',
-                    'type' => 'trigger',
-                    'trigger_type' => 'wordpress_comment_post',
-                ],
-                [
-                    'id' => 'agent_1',
-                    'type' => 'agent',
-                    'agent_id' => 'llm_decision_agent',
-                    'config' => [
-                        'inputs' => [
-                            'prompt' => 'Analyze this comment and decide: approve, spam, or delete. Comment: {{trigger_1.content}}',
-                            'context' => [
-                                'author' => '{{trigger_1.author}}',
-                                'email' => '{{trigger_1.email}}',
-                            ],
-                        ],
-                    ],
-                ],
-                [
-                    'id' => 'action_1',
-                    'type' => 'action',
-                    'action_type' => 'conditional',
-                    'config' => [
-                        'conditions' => [
-                            ['if' => "decision == 'approve'", 'then' => 'wordpress_approve_comment'],
-                            ['if' => "decision == 'spam'", 'then' => 'wordpress_spam_comment'],
-                            ['if' => "decision == 'delete'", 'then' => 'wordpress_delete_comment'],
-                        ],
-                    ],
-                ],
-            ],
-            'edges' => [
-                ['from' => 'trigger_1', 'to' => 'agent_1'],
-                ['from' => 'agent_1', 'to' => 'action_1'],
-            ],
-        ];
-        
-        $workflow_id = $flow_manager->create_workflow($workflow_data);
-        
-        if ($workflow_id) {
-            wp_redirect(admin_url('admin.php?page=u43&message=created'));
-            exit;
         }
     }
     
@@ -391,13 +322,6 @@ class Admin {
      */
     public function render_workflow_list() {
         include U43_PLUGIN_DIR . 'admin/views/workflow-list.php';
-    }
-    
-    /**
-     * Render workflow form
-     */
-    public function render_workflow_form() {
-        include U43_PLUGIN_DIR . 'admin/views/workflow-form.php';
     }
     
     /**

@@ -80,6 +80,8 @@ export const iconMap = {
   
   // Communication icons
   'email': '📧',
+  'message-circle': '💬',
+  'chat': '💬',
   'whatsapp': 'whatsapp-icon', // Custom SVG component
   'woocommerce': 'woocommerce-icon', // Custom SVG component
   

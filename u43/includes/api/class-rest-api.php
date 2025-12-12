@@ -171,6 +171,12 @@ class REST_API {
             'permission_callback' => '__return_true', // Public endpoint, but we verify it
             'args' => [],
         ]);
+        
+        register_rest_route('u43/v1', '/openai/models', [
+            'methods' => 'GET',
+            'callback' => [$this, 'get_openai_models'],
+            'permission_callback' => [$this, 'check_permissions'],
+        ]);
     }
     
     /**
@@ -1028,6 +1034,123 @@ class REST_API {
                 ]));
                 break;
         }
+    }
+    
+    /**
+     * Get OpenAI models
+     *
+     * @param \WP_REST_Request $request
+     * @return \WP_REST_Response|\WP_Error
+     */
+    public function get_openai_models($request) {
+        $api_key = get_option('u43_openai_api_key', '');
+        
+        if (empty($api_key)) {
+            return new \WP_Error('api_key_missing', 'OpenAI API key is not configured', ['status' => 400]);
+        }
+        
+        // Fetch models from OpenAI API
+        $response = wp_remote_get('https://api.openai.com/v1/models', [
+            'headers' => [
+                'Authorization' => 'Bearer ' . $api_key,
+                'Content-Type' => 'application/json'
+            ],
+            'timeout' => 30
+        ]);
+        
+        if (is_wp_error($response)) {
+            return new \WP_Error('api_error', 'Failed to fetch models: ' . $response->get_error_message(), ['status' => 500]);
+        }
+        
+        $status_code = wp_remote_retrieve_response_code($response);
+        if ($status_code !== 200) {
+            $body = wp_remote_retrieve_body($response);
+            return new \WP_Error('api_error', 'OpenAI API error: HTTP ' . $status_code . ' - ' . $body, ['status' => $status_code]);
+        }
+        
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+        
+        if (!isset($body['data']) || !is_array($body['data'])) {
+            return new \WP_Error('invalid_response', 'Invalid response from OpenAI API', ['status' => 500]);
+        }
+        
+        // Filter and format models - only include chat models (gpt-*)
+        $chat_models = [];
+        foreach ($body['data'] as $model) {
+            $model_id = $model['id'] ?? '';
+            // Only include GPT models that support chat completions
+            if (strpos($model_id, 'gpt-') === 0 && strpos($model_id, 'instruct') === false) {
+                $chat_models[] = [
+                    'id' => $model_id,
+                    'name' => $model_id,
+                    'description' => $this->get_model_description($model_id)
+                ];
+            }
+        }
+        
+        // Sort models: gpt-4 first, then gpt-3.5, then others
+        usort($chat_models, function($a, $b) {
+            $a_id = $a['id'];
+            $b_id = $b['id'];
+            
+            // gpt-4 models first
+            if (strpos($a_id, 'gpt-4') === 0 && strpos($b_id, 'gpt-4') !== 0) {
+                return -1;
+            }
+            if (strpos($b_id, 'gpt-4') === 0 && strpos($a_id, 'gpt-4') !== 0) {
+                return 1;
+            }
+            
+            // gpt-3.5 models second
+            if (strpos($a_id, 'gpt-3.5') === 0 && strpos($b_id, 'gpt-3.5') !== 0) {
+                return -1;
+            }
+            if (strpos($b_id, 'gpt-3.5') === 0 && strpos($a_id, 'gpt-3.5') !== 0) {
+                return 1;
+            }
+            
+            // Otherwise alphabetical
+            return strcmp($a_id, $b_id);
+        });
+        
+        return new \WP_REST_Response([
+            'models' => $chat_models,
+            'default_model' => !empty($chat_models) ? $chat_models[0]['id'] : 'gpt-3.5-turbo'
+        ], 200);
+    }
+    
+    /**
+     * Get model description
+     *
+     * @param string $model_id Model ID
+     * @return string
+     */
+    private function get_model_description($model_id) {
+        $descriptions = [
+            'gpt-4o' => 'GPT-4 Optimized - Most capable model',
+            'gpt-4o-mini' => 'GPT-4 Optimized Mini - Faster and cheaper',
+            'gpt-4-turbo' => 'GPT-4 Turbo - Faster GPT-4',
+            'gpt-4' => 'GPT-4 - Most capable model',
+            'gpt-3.5-turbo' => 'GPT-3.5 Turbo - Fast and cost-effective',
+        ];
+        
+        // Check exact match first
+        if (isset($descriptions[$model_id])) {
+            return $descriptions[$model_id];
+        }
+        
+        // Check prefix matches
+        if (strpos($model_id, 'gpt-4o') === 0) {
+            return 'GPT-4 Optimized model';
+        }
+        if (strpos($model_id, 'gpt-4') === 0) {
+            return 'GPT-4 model';
+        }
+        if (strpos($model_id, 'gpt-3.5') === 0) {
+            return 'GPT-3.5 model';
+        }
+        
+        return 'OpenAI Chat Model';
     }
 }
 

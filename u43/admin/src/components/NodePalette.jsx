@@ -1,5 +1,6 @@
 // NodePalette component
 import { useState, useEffect, useMemo } from 'react';
+import { Tooltip } from 'react-tooltip';
 import { useWorkflowStore } from '../store/workflowStore';
 import { iconMap, renderIcon } from './Icons';
 
@@ -373,24 +374,31 @@ export default function NodePalette() {
                   
                   {isExpanded && (
                     <div className="space-y-1 mt-1 ml-4">
-              {nodes.map((node, index) => (
-                <div
-                  key={`${node.nodeId || node.id}-${index}`}
-                  draggable
-                  onDragStart={(e) => handleDragStart(e, node.id, node.label, node)}
-                          className="flex items-center gap-1.5 p-2 rounded hover:bg-gray-100 cursor-grab active:cursor-grabbing"
-                >
-                          <span className="flex-shrink-0">{renderIcon(node.icon, node.category)}</span>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-gray-900 truncate">
-                      {node.label}
+              {nodes.map((node, index) => {
+                const nodeKey = `${node.nodeId || node.id}-${index}`;
+                const tooltipId = `node-tooltip-${nodeKey}`;
+                return (
+                  <div
+                    key={nodeKey}
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, node.id, node.label, node)}
+                    className="flex items-center gap-1.5 p-2 rounded hover:bg-gray-100 cursor-grab active:cursor-grabbing"
+                    data-tooltip-id={tooltipId}
+                    data-tooltip-content={node.description || node.label}
+                  >
+                    <span className="flex-shrink-0">{renderIcon(node.icon, node.category)}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-gray-900 truncate">
+                        {node.label}
+                      </div>
+                      <div className="text-xs text-gray-500 truncate">
+                        {node.description}
+                      </div>
                     </div>
-                    <div className="text-xs text-gray-500 truncate">
-                      {node.description}
-                    </div>
+                    <Tooltip id={tooltipId} />
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
                   )}
                 </div>

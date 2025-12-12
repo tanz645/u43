@@ -1,6 +1,6 @@
 <?php
 /**
- * Send WhatsApp Message Tool
+ * Send WhatsApp Text Message Tool
  *
  * @package U43
  */
@@ -10,7 +10,7 @@ namespace U43\Tools\WhatsApp;
 use U43\Tools\Tool_Base;
 use U43\Integrations\WhatsApp\WhatsApp_API_Client;
 
-class Send_Message extends Tool_Base {
+class Send_Text_Message extends Tool_Base {
     
     /**
      * Execute the tool
@@ -28,27 +28,12 @@ class Send_Message extends Tool_Base {
             throw new \Exception('Phone numbers are required. Provide either phone_numbers array or phone_number_variable from previous node.');
         }
         
-        // Get message type and normalize it
-        $message_type = isset($inputs['message_type']) ? strtolower(trim($inputs['message_type'])) : 'text';
+        // Get message text
         $message = isset($inputs['message']) ? trim($inputs['message']) : '';
-        $template_name = isset($inputs['template_name']) ? trim($inputs['template_name']) : '';
-        $template_language = isset($inputs['template_language']) ? trim($inputs['template_language']) : 'en_US';
         
-        // Validate based on message type
-        if ($message_type === 'text') {
-            if (empty($message)) {
-                throw new \Exception('Message text is required for text messages');
-            }
-        } elseif ($message_type === 'template') {
-            if (empty($template_name)) {
-                throw new \Exception('Template name is required for template messages');
-            }
-        } else {
-            // Default to text if invalid message_type
-            $message_type = 'text';
-            if (empty($message)) {
-                throw new \Exception('Message text is required for text messages');
-            }
+        // Validate message text
+        if (empty($message)) {
+            throw new \Exception('Message text is required');
         }
         
         $api_client = new WhatsApp_API_Client();
@@ -57,28 +42,22 @@ class Send_Message extends Tool_Base {
         
         // Send message to each phone number
         foreach ($phone_numbers as $phone_number) {
-            if ($message_type === 'template') {
-                $result = $api_client->send_template_message(
-                    $phone_number,
-                    $template_name,
-                    [],
-                    $template_language
-                );
-            } else {
-                $result = $api_client->send_message($phone_number, $message);
-            }
+            $result = $api_client->send_message($phone_number, $message);
+            
+            // Format phone number with + prefix for storage/display
+            $formatted_phone = $api_client->format_phone_number($phone_number, false);
             
             if ($result['success']) {
                 $message_id = $result['data']['messages'][0]['id'] ?? '';
                 $results[] = [
-                    'phone_number' => $phone_number,
+                    'phone_number' => $formatted_phone,
                     'message_id' => $message_id,
                     'status' => 'sent',
                 ];
-                $sent_to[] = $phone_number;
+                $sent_to[] = $formatted_phone;
             } else {
                 $results[] = [
-                    'phone_number' => $phone_number,
+                    'phone_number' => $formatted_phone,
                     'status' => 'failed',
                     'error' => $result['message'] ?? 'Failed to send message',
                 ];
@@ -132,13 +111,15 @@ class Send_Message extends Tool_Base {
         // Priority 2: Variable from previous node
         elseif (!empty($inputs['phone_number_variable'])) {
             $variable_value = $inputs['phone_number_variable'];
-            $variable_name = $inputs['phone_number_variable'];
+            $original_variable = $variable_value;
             
             // Check if variable_value was already resolved from template ({{node_id.field}})
-            // If it's an array or non-empty string, it was resolved
+            // If it doesn't contain {{ }}, it was already resolved by the executor
+            $is_resolved = !is_string($variable_value) || strpos($variable_value, '{{') === false;
+            
             if (is_array($variable_value)) {
                 $phone_numbers = $variable_value;
-            } elseif (is_string($variable_value) && !empty($variable_value) && $variable_value !== $variable_name) {
+            } elseif ($is_resolved && is_string($variable_value) && !empty($variable_value)) {
                 // Variable was resolved - check if it's JSON array or single value
                 $decoded = json_decode($variable_value, true);
                 if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
@@ -149,29 +130,40 @@ class Send_Message extends Tool_Base {
                 }
             }
             
-            // If still empty or variable wasn't resolved, search context for the variable name
-            if (empty($phone_numbers)) {
-                // Search through all node outputs in context
-                foreach ($context as $key => $value) {
-                    if ($key === 'trigger_data') {
-                        continue; // Skip trigger_data
-                    }
+            // If still empty or variable wasn't resolved, try to resolve it manually from context
+            if (empty($phone_numbers) && !$is_resolved && is_string($original_variable)) {
+                // Try to resolve the template manually (e.g., {{trigger_data.content}})
+                if (preg_match('/\{\{([^}]+)\}\}/', $original_variable, $matches)) {
+                    $var_path = trim($matches[1]);
+                    $parts = explode('.', $var_path);
+                    $var_value = $context;
                     
-                    // Check if this node output contains the variable
-                    if (is_array($value)) {
-                        // Check direct key match
-                        if (isset($value[$variable_name])) {
-                            $found_value = $value[$variable_name];
-                            if (is_array($found_value)) {
-                                $phone_numbers = $found_value;
-                            } elseif (is_string($found_value) || is_numeric($found_value)) {
-                                $phone_numbers = [(string)$found_value];
-                            }
+                    foreach ($parts as $part) {
+                        if (is_array($var_value) && isset($var_value[$part])) {
+                            $var_value = $var_value[$part];
+                        } else {
+                            $var_value = null;
                             break;
                         }
-                        
-                        // Also check common field names
-                        $common_fields = ['phone', 'phone_number', 'to', 'recipient', 'contact'];
+                    }
+                    
+                    if ($var_value !== null) {
+                        if (is_array($var_value)) {
+                            $phone_numbers = $var_value;
+                        } elseif (is_string($var_value) || is_numeric($var_value)) {
+                            $phone_numbers = [(string)$var_value];
+                        }
+                    }
+                }
+            }
+            
+            // If still empty, search context for common phone number fields
+            if (empty($phone_numbers)) {
+                // Search through all node outputs in context (including trigger_data)
+                foreach ($context as $key => $value) {
+                    if (is_array($value)) {
+                        // Check common field names
+                        $common_fields = ['phone', 'phone_number', 'to', 'recipient', 'contact', 'content'];
                         foreach ($common_fields as $field) {
                             if (isset($value[$field])) {
                                 $found_value = $value[$field];
@@ -198,5 +190,3 @@ class Send_Message extends Tool_Base {
         }));
     }
 }
-
-

@@ -293,15 +293,28 @@ class WhatsApp_API_Client {
      * Format phone number
      *
      * @param string $phone_number Phone number
-     * @return string Formatted phone number (without + prefix for WhatsApp Cloud API)
+     * @param bool $for_api Whether formatting for API (removes +) or for display (keeps +)
+     * @return string Formatted phone number
      */
-    public function format_phone_number($phone_number) {
-        // Remove all non-digit characters
-        $phone_number = preg_replace('/[^\d]/', '', $phone_number);
+    public function format_phone_number($phone_number, $for_api = true) {
+        // Remove all non-digit characters first
+        $phone_number = preg_replace('/[^\d]/', '', (string)$phone_number);
         
-        // WhatsApp Cloud API accepts phone numbers without + prefix
-        // Just return the digits
-        return $phone_number;
+        if (empty($phone_number)) {
+            return $phone_number;
+        }
+        
+        // Add + prefix for E.164 format
+        $formatted = '+' . $phone_number;
+        
+        // WhatsApp Cloud API requires phone numbers without + prefix
+        // Return digits only if formatting for API
+        if ($for_api) {
+            return $phone_number;
+        }
+        
+        // Return with + prefix for display/storage
+        return $formatted;
     }
 }
 

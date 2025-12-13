@@ -968,6 +968,16 @@ class REST_API {
             'timestamp' => isset($message['timestamp']) ? (int)$message['timestamp'] : time(),
         ];
         
+        // Handle interactive messages (button clicks)
+        if (isset($message['interactive']) && $message['interactive']['type'] === 'button_reply') {
+            $interactive = $message['interactive'];
+            $data['message_type'] = 'interactive';
+            $data['interactive_type'] = 'button_reply';
+            $data['button_id'] = $interactive['button_reply']['id'] ?? '';
+            $data['button_title'] = $interactive['button_reply']['title'] ?? '';
+            $data['message_text'] = $data['button_title']; // Use button title as message text
+        }
+        
         // Handle media messages
         if (isset($message['image'])) {
             $data['media_url'] = $message['image']['id'] ?? '';

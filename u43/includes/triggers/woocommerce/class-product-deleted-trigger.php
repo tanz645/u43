@@ -39,3 +39,4 @@ class Product_Deleted_Trigger extends Trigger_Base {
         ];
     }
 }
+

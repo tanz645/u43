@@ -45,6 +45,18 @@
     "media_type": {
       "type": "string",
       "label": "Media Type"
+    },
+    "interactive_type": {
+      "type": "string",
+      "label": "Interactive Type"
+    },
+    "button_id": {
+      "type": "string",
+      "label": "Button ID"
+    },
+    "button_title": {
+      "type": "string",
+      "label": "Button Title"
     }
   },
   "handler": "U43\\Triggers\\WhatsApp\\Message_Received_Trigger"

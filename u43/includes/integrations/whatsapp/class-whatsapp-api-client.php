@@ -55,6 +55,78 @@ class WhatsApp_API_Client {
     }
     
     /**
+     * Send interactive button message
+     *
+     * @param string $to Phone number
+     * @param string $body_text Body text
+     * @param array $buttons Array of button objects (max 3)
+     * @param string $header_text Optional header text
+     * @param string $footer_text Optional footer text
+     * @return array
+     */
+    public function send_interactive_button_message($to, $body_text, $buttons = [], $header_text = '', $footer_text = '') {
+        $phone_number_id = get_option('u43_whatsapp_phone_number_id', '');
+        
+        if (empty($phone_number_id)) {
+            return [
+                'success' => false,
+                'message' => 'Phone number ID not configured. Please configure it in WhatsApp settings.'
+            ];
+        }
+        
+        if (empty($body_text)) {
+            return [
+                'success' => false,
+                'message' => 'Body text is required'
+            ];
+        }
+        
+        if (empty($buttons) || count($buttons) > 3) {
+            return [
+                'success' => false,
+                'message' => 'Between 1 and 3 buttons are required'
+            ];
+        }
+        
+        $url = $this->api_base_url . '/' . $phone_number_id . '/messages';
+        
+        // Build interactive message structure
+        $interactive = [
+            'type' => 'button',
+            'body' => [
+                'text' => $body_text
+            ],
+            'action' => [
+                'buttons' => $buttons
+            ]
+        ];
+        
+        // Add header if provided
+        if (!empty($header_text)) {
+            $interactive['header'] = [
+                'type' => 'text',
+                'text' => $header_text
+            ];
+        }
+        
+        // Add footer if provided
+        if (!empty($footer_text)) {
+            $interactive['footer'] = [
+                'text' => $footer_text
+            ];
+        }
+        
+        $data = [
+            'messaging_product' => 'whatsapp',
+            'to' => $this->format_phone_number($to),
+            'type' => 'interactive',
+            'interactive' => $interactive
+        ];
+        
+        return $this->make_request('POST', $url, $data);
+    }
+    
+    /**
      * Send template message
      *
      * @param string $to Phone number

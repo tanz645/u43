@@ -123,6 +123,7 @@ export default function NodeConfigPanel() {
             'wordpress_delete_comment': 'delete_comment',
             'wordpress_send_email': 'send_email',
             'whatsapp_send_text_message': 'whatsapp_send_text_message',
+            'whatsapp_send_button_message': 'whatsapp_send_button_message',
           };
           configToSet.actionType = toolIdToActionTypeMap[configToSet.tool_id] || configToSet.tool_id;
         }
@@ -169,6 +170,43 @@ export default function NodeConfigPanel() {
         const prompt = config.prompt || '';
         if (!prompt || prompt.trim() === '') {
           alert('Please enter a prompt for the AI agent. The node cannot be saved without a prompt.');
+          return;
+        }
+      }
+      
+      // Validate action nodes have required fields
+      if (selectedNode?.data?.nodeType === 'action' && toolConfig && toolConfig.inputs) {
+        const missingRequiredFields = [];
+        const inputs = config.inputs || {};
+        
+        Object.entries(toolConfig.inputs).forEach(([inputKey, inputConfig]) => {
+          // Skip hidden fields (message_type, template fields)
+          if (inputKey === 'message_type' || inputKey === 'template_name' || inputKey === 'template_language') {
+            return;
+          }
+          
+          if (inputConfig.required) {
+            const inputValue = inputs[inputKey] ?? inputConfig.default ?? '';
+            
+            // Check if field is empty
+            let isEmpty = false;
+            
+            if (inputConfig.type === 'array') {
+              isEmpty = !Array.isArray(inputValue) || inputValue.length === 0;
+            } else if (typeof inputValue === 'string') {
+              isEmpty = inputValue.trim() === '';
+            } else {
+              isEmpty = !inputValue || inputValue === null || inputValue === undefined;
+            }
+            
+            if (isEmpty) {
+              missingRequiredFields.push(inputConfig.label || inputKey);
+            }
+          }
+        });
+        
+        if (missingRequiredFields.length > 0) {
+          alert(`Please fill in all required fields:\n\n${missingRequiredFields.join('\n')}\n\nThe node cannot be saved without these fields.`);
           return;
         }
       }
@@ -730,6 +768,110 @@ export default function NodeConfigPanel() {
                       return null;
                     }
                     
+                    // Special handling for buttons array - show button configuration UI
+                    if (inputKey === 'buttons' && toolConfig.id === 'whatsapp_send_button_message') {
+                      const buttons = Array.isArray(inputValue) ? inputValue : [];
+                      const buttonColors = ['#3B82F6', '#10B981', '#F59E0B']; // Blue, Green, Orange
+                      
+                      return (
+                        <div key={inputKey}>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            {inputConfig.label || inputKey}
+                            {inputConfig.required && <span className="text-red-500 ml-1">*</span>}
+                            <span className="text-xs text-gray-500 ml-2">(Max 3 buttons)</span>
+                          </label>
+                          
+                          <div className="space-y-2 mb-2">
+                            {buttons.map((button, index) => (
+                              <div key={index} className="flex items-center gap-2 p-2 border border-gray-300 rounded-md bg-gray-50">
+                                <div 
+                                  className="w-4 h-4 rounded border-2 border-gray-300"
+                                  style={{ backgroundColor: button.color || buttonColors[index] || '#3B82F6' }}
+                                  title={`Button ${index + 1} color`}
+                                />
+                                <div className="flex-1">
+                                  <input
+                                    type="text"
+                                    value={button.id || ''}
+                                    onChange={(e) => {
+                                      const newButtons = [...buttons];
+                                      newButtons[index] = { ...newButtons[index], id: e.target.value };
+                                      setConfig({
+                                        ...config,
+                                        inputs: {
+                                          ...(config.inputs || {}),
+                                          [inputKey]: newButtons,
+                                        },
+                                      });
+                                    }}
+                                    placeholder="Button ID (e.g., btn1)"
+                                    className="w-full px-2 py-1 text-xs border border-gray-300 rounded mb-1"
+                                  />
+                                  <input
+                                    type="text"
+                                    value={button.title || ''}
+                                    onChange={(e) => {
+                                      const newButtons = [...buttons];
+                                      newButtons[index] = { ...newButtons[index], title: e.target.value };
+                                      setConfig({
+                                        ...config,
+                                        inputs: {
+                                          ...(config.inputs || {}),
+                                          [inputKey]: newButtons,
+                                        },
+                                      });
+                                    }}
+                                    placeholder="Button Title"
+                                    className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
+                                  />
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const newButtons = buttons.filter((_, i) => i !== index);
+                                    setConfig({
+                                      ...config,
+                                      inputs: {
+                                        ...(config.inputs || {}),
+                                        [inputKey]: newButtons,
+                                      },
+                                    });
+                                  }}
+                                  className="text-red-500 hover:text-red-700 text-sm"
+                                  title="Remove button"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                          
+                          {buttons.length < 3 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newButtons = [...buttons, { id: `btn${buttons.length + 1}`, title: '', type: 'reply', color: buttonColors[buttons.length] || '#3B82F6' }];
+                                setConfig({
+                                  ...config,
+                                  inputs: {
+                                    ...(config.inputs || {}),
+                                    [inputKey]: newButtons,
+                                  },
+                                });
+                              }}
+                              className="text-sm text-blue-600 hover:text-blue-800 mb-2"
+                            >
+                              + Add Button
+                            </button>
+                          )}
+                          
+                          {inputConfig.description && (
+                            <p className="text-xs text-gray-500 mt-1">{inputConfig.description}</p>
+                          )}
+                        </div>
+                      );
+                    }
+                    
                     // Special handling for phone_number_variable - show variable selection UI
                     if (inputKey === 'phone_number_variable') {
                       // Combine trigger nodes and connected source nodes
@@ -1009,7 +1151,7 @@ export default function NodeConfigPanel() {
                   }
                   
                   // Special handling for message field - make it a larger textarea
-                  if (inputKey === 'message') {
+                  if (inputKey === 'message' || inputKey === 'body_text') {
                     return (
                       <div key={inputKey}>
                         <label className="block text-sm font-medium text-gray-700 mb-1">

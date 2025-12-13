@@ -141,6 +141,33 @@ export default function WorkflowNode({ id, data, selected }) {
         const normalizedToolId = toolId.replace(/-/g, '_');
         const normalizedToolIdHyphen = toolId.replace(/_/g, '-');
         const toolConfig = toolConfigs[toolId] || toolConfigs[normalizedToolId] || toolConfigs[normalizedToolIdHyphen];
+        
+        // Special handling for button message nodes - generate outputs from buttons
+        if (toolId === 'whatsapp_send_button_message' || normalizedToolId === 'whatsapp_send_button_message' || normalizedToolIdHyphen === 'whatsapp_send_button_message') {
+          const buttons = data.config?.inputs?.buttons || [];
+          // Only generate outputs if buttons exist and have valid IDs
+          if (Array.isArray(buttons) && buttons.length > 0) {
+            const buttonOutputs = {};
+            buttons.forEach((button, index) => {
+              // Only add output if button has an ID
+              if (button && button.id) {
+                const buttonId = button.id;
+                const buttonTitle = button.title || buttonId;
+                buttonOutputs[buttonId] = {
+                  type: 'string',
+                  label: buttonTitle
+                };
+              }
+            });
+            // Only return outputs if we have valid button outputs
+            if (Object.keys(buttonOutputs).length > 0) {
+              return buttonOutputs;
+            }
+          }
+          // For button message nodes, return empty object if no buttons configured
+          return {};
+        }
+        
         if (toolConfig && toolConfig.outputs) {
           return toolConfig.outputs;
         }
@@ -148,7 +175,7 @@ export default function WorkflowNode({ id, data, selected }) {
     }
     
     return {};
-  }, [nodeType, data.config, data.triggerType, data.agentId, data.toolId, triggerConfigs, agentConfigs, toolConfigs]);
+  }, [nodeType, data.config, data.triggerType, data.agentId, data.toolId, data.config?.inputs?.buttons, triggerConfigs, agentConfigs, toolConfigs]);
   
   const hasOutputs = Object.keys(nodeOutputs).length > 0;
   
@@ -306,6 +333,34 @@ export default function WorkflowNode({ id, data, selected }) {
             </div>
           </div>
         )}
+        
+        {/* Show buttons for button message nodes */}
+        {nodeType === 'action' && data.config?.tool_id === 'whatsapp_send_button_message' && data.config?.inputs?.buttons && Array.isArray(data.config.inputs.buttons) && data.config.inputs.buttons.length > 0 && (
+          <div className="mt-2 pt-2 border-t border-gray-200">
+            <div className="text-xs font-medium text-gray-700 mb-1.5">Buttons:</div>
+            <div className="space-y-1.5">
+              {data.config.inputs.buttons.map((button, index) => {
+                const buttonColors = ['#3B82F6', '#10B981', '#F59E0B']; // Blue, Green, Orange
+                const buttonColor = button.color || buttonColors[index] || buttonColors[0];
+                const buttonId = button.id || `btn${index + 1}`;
+                const buttonTitle = button.title || buttonId;
+                
+                return (
+                  <div key={index} className="flex items-center gap-2">
+                    <div 
+                      className="w-4 h-4 rounded border-2 border-white flex-shrink-0 shadow-sm" 
+                      style={{ backgroundColor: buttonColor }}
+                      title={`Button: ${buttonTitle}`}
+                    />
+                    <span className="text-xs text-gray-600 truncate flex-1">
+                      {buttonTitle}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
       
       {/* Output Preview Section - Always show for all nodes */}
@@ -426,6 +481,46 @@ export default function WorkflowNode({ id, data, selected }) {
             );
           })}
         </>
+      ) : nodeType === 'action' && (data.config?.tool_id === 'whatsapp_send_button_message' || data.toolId === 'whatsapp_send_button_message') ? (
+        // Button message nodes: only show handles when buttons exist and have valid IDs
+        (() => {
+          const buttons = data.config?.inputs?.buttons || [];
+          const hasValidButtons = Array.isArray(buttons) && buttons.length > 0 && buttons.some(btn => btn && btn.id);
+          return hasValidButtons && hasOutputs && Object.keys(nodeOutputs).length > 0;
+        })() ? (
+          <>
+            {Object.entries(nodeOutputs).map(([outputKey, output], index, arr) => {
+              const buttons = data.config?.inputs?.buttons || [];
+              const buttonIndex = buttons.findIndex(btn => (btn.id || '').toString() === outputKey.toString());
+              
+              // Use button colors - match the button display
+              const buttonColors = ['#3B82F6', '#10B981', '#F59E0B']; // Blue, Green, Orange
+              let handleColor = buttonColors[index] || buttonColors[0];
+              if (buttonIndex >= 0 && buttons[buttonIndex].color) {
+                handleColor = buttons[buttonIndex].color;
+              }
+              
+              // Calculate position: distribute handles evenly along the right side
+              const totalOutputs = arr.length;
+              const topPercentage = totalOutputs === 1 ? '50%' : `${30 + (index * (40 / (totalOutputs - 1)))}%`;
+              
+              return (
+                <Handle
+                  key={outputKey}
+                  type="source"
+                  id={outputKey}
+                  position={Position.Right}
+                  className="!border-white"
+                  style={{ 
+                    top: topPercentage,
+                    backgroundColor: handleColor 
+                  }}
+                  label={output.label || outputKey}
+                />
+              );
+            })}
+          </>
+        ) : null
       ) : (
       <Handle
         type="source"

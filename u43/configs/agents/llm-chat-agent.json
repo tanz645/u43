@@ -1,0 +1,50 @@
+{
+  "id": "llm_chat_agent",
+  "name": "LLM Chat Agent",
+  "description": "Chat with Large Language Models like ChatGPT and DeepSeek",
+  "version": "1.0.0",
+  "category": "ai",
+  "icon": "message-circle",
+  "inputs": {
+    "message": {
+      "type": "string",
+      "required": true,
+      "label": "Message",
+      "description": "The message to send to the LLM"
+    },
+    "conversation_history": {
+      "type": "array",
+      "required": false,
+      "label": "Conversation History",
+      "description": "Previous messages in the conversation (array of objects with 'role' and 'content')"
+    },
+    "system_prompt": {
+      "type": "string",
+      "required": false,
+      "label": "System Prompt",
+      "description": "Optional system prompt to set the assistant's behavior"
+    }
+  },
+  "outputs": {
+    "response": {
+      "type": "string",
+      "label": "Response"
+    },
+    "model_used": {
+      "type": "string",
+      "label": "Model Used"
+    },
+    "tokens_used": {
+      "type": "number",
+      "label": "Tokens Used"
+    }
+  },
+  "handler": "U43\\Agents\\Built_In\\LLM_Chat_Agent\\LLM_Chat_Agent",
+  "settings": {
+    "provider": "openai",
+    "model": "gpt-3.5-turbo",
+    "temperature": 0.7,
+    "system_prompt": "You are a helpful assistant."
+  }
+}
+

@@ -171,6 +171,123 @@ class REST_API {
             'permission_callback' => '__return_true', // Public endpoint, but we verify it
             'args' => [],
         ]);
+        
+        register_rest_route('u43/v1', '/openai/models', [
+            'methods' => 'GET',
+            'callback' => [$this, 'get_openai_models'],
+            'permission_callback' => [$this, 'check_permissions'],
+        ]);
+        
+        // Campaigns endpoints
+        register_rest_route('u43/v1', '/campaigns', [
+            'methods' => 'GET',
+            'callback' => [$this, 'get_campaigns'],
+            'permission_callback' => [$this, 'check_permissions'],
+        ]);
+        
+        register_rest_route('u43/v1', '/campaigns', [
+            'methods' => 'POST',
+            'callback' => [$this, 'create_campaign'],
+            'permission_callback' => [$this, 'check_permissions'],
+        ]);
+        
+        register_rest_route('u43/v1', '/campaigns/(?P<id>\d+)', [
+            'methods' => 'GET',
+            'callback' => [$this, 'get_campaign'],
+            'permission_callback' => [$this, 'check_permissions'],
+        ]);
+        
+        register_rest_route('u43/v1', '/campaigns/(?P<id>\d+)', [
+            'methods' => 'PUT',
+            'callback' => [$this, 'update_campaign'],
+            'permission_callback' => [$this, 'check_permissions'],
+        ]);
+        
+        register_rest_route('u43/v1', '/campaigns/(?P<id>\d+)/start', [
+            'methods' => 'POST',
+            'callback' => [$this, 'start_campaign'],
+            'permission_callback' => [$this, 'check_permissions'],
+        ]);
+        
+        register_rest_route('u43/v1', '/campaigns/(?P<id>\d+)/process-batch', [
+            'methods' => 'POST',
+            'callback' => [$this, 'process_campaign_batch'],
+            'permission_callback' => [$this, 'check_permissions'],
+        ]);
+        
+        register_rest_route('u43/v1', '/campaigns/(?P<id>\d+)/logs', [
+            'methods' => 'GET',
+            'callback' => [$this, 'get_campaign_logs'],
+            'permission_callback' => [$this, 'check_permissions'],
+        ]);
+        
+        register_rest_route('u43/v1', '/campaigns/(?P<id>\d+)/delivery-logs', [
+            'methods' => 'GET',
+            'callback' => [$this, 'get_campaign_delivery_logs'],
+            'permission_callback' => [$this, 'check_permissions'],
+        ]);
+        
+        // Contacts endpoints
+        register_rest_route('u43/v1', '/contacts', [
+            'methods' => 'GET',
+            'callback' => [$this, 'get_contacts'],
+            'permission_callback' => [$this, 'check_permissions'],
+        ]);
+        
+        register_rest_route('u43/v1', '/contacts', [
+            'methods' => 'POST',
+            'callback' => [$this, 'create_contact'],
+            'permission_callback' => [$this, 'check_permissions'],
+        ]);
+        
+        register_rest_route('u43/v1', '/contacts/(?P<id>\d+)', [
+            'methods' => 'GET',
+            'callback' => [$this, 'get_contact'],
+            'permission_callback' => [$this, 'check_permissions'],
+        ]);
+        
+        register_rest_route('u43/v1', '/contacts/(?P<id>\d+)', [
+            'methods' => 'PUT',
+            'callback' => [$this, 'update_contact'],
+            'permission_callback' => [$this, 'check_permissions'],
+        ]);
+        
+        register_rest_route('u43/v1', '/contacts/(?P<id>\d+)', [
+            'methods' => 'DELETE',
+            'callback' => [$this, 'delete_contact'],
+            'permission_callback' => [$this, 'check_permissions'],
+        ]);
+        
+        register_rest_route('u43/v1', '/contacts/import', [
+            'methods' => 'POST',
+            'callback' => [$this, 'import_contacts'],
+            'permission_callback' => [$this, 'check_permissions'],
+        ]);
+        
+        // Tags and folders endpoints
+        register_rest_route('u43/v1', '/tags', [
+            'methods' => 'GET',
+            'callback' => [$this, 'get_tags'],
+            'permission_callback' => [$this, 'check_permissions'],
+        ]);
+        
+        register_rest_route('u43/v1', '/tags', [
+            'methods' => 'POST',
+            'callback' => [$this, 'create_tag'],
+            'permission_callback' => [$this, 'check_permissions'],
+        ]);
+        
+        register_rest_route('u43/v1', '/folders', [
+            'methods' => 'GET',
+            'callback' => [$this, 'get_folders'],
+            'permission_callback' => [$this, 'check_permissions'],
+        ]);
+        
+        register_rest_route('u43/v1', '/folders', [
+            'methods' => 'POST',
+            'callback' => [$this, 'create_folder'],
+            'permission_callback' => [$this, 'check_permissions'],
+        ]);
     }
     
     /**
@@ -1096,6 +1213,585 @@ class REST_API {
                     'failed_at' => $status['timestamp'] ?? time()
                 ]));
                 break;
+        }
+    }
+    
+    /**
+     * Get OpenAI models
+     *
+     * @param \WP_REST_Request $request
+     * @return \WP_REST_Response|\WP_Error
+     */
+    public function get_openai_models($request) {
+        $api_key = get_option('u43_openai_api_key', '');
+        
+        if (empty($api_key)) {
+            return new \WP_Error('api_key_missing', 'OpenAI API key is not configured', ['status' => 400]);
+        }
+        
+        // Fetch models from OpenAI API
+        $response = wp_remote_get('https://api.openai.com/v1/models', [
+            'headers' => [
+                'Authorization' => 'Bearer ' . $api_key,
+                'Content-Type' => 'application/json'
+            ],
+            'timeout' => 30
+        ]);
+        
+        if (is_wp_error($response)) {
+            return new \WP_Error('api_error', 'Failed to fetch models: ' . $response->get_error_message(), ['status' => 500]);
+        }
+        
+        $status_code = wp_remote_retrieve_response_code($response);
+        if ($status_code !== 200) {
+            $body = wp_remote_retrieve_body($response);
+            return new \WP_Error('api_error', 'OpenAI API error: HTTP ' . $status_code . ' - ' . $body, ['status' => $status_code]);
+        }
+        
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+        
+        if (!isset($body['data']) || !is_array($body['data'])) {
+            return new \WP_Error('invalid_response', 'Invalid response from OpenAI API', ['status' => 500]);
+        }
+        
+        // Filter and format models - only include chat models (gpt-*)
+        $chat_models = [];
+        foreach ($body['data'] as $model) {
+            $model_id = $model['id'] ?? '';
+            // Only include GPT models that support chat completions
+            if (strpos($model_id, 'gpt-') === 0 && strpos($model_id, 'instruct') === false) {
+                $chat_models[] = [
+                    'id' => $model_id,
+                    'name' => $model_id,
+                    'description' => $this->get_model_description($model_id)
+                ];
+            }
+        }
+        
+        // Sort models: gpt-4 first, then gpt-3.5, then others
+        usort($chat_models, function($a, $b) {
+            $a_id = $a['id'];
+            $b_id = $b['id'];
+            
+            // gpt-4 models first
+            if (strpos($a_id, 'gpt-4') === 0 && strpos($b_id, 'gpt-4') !== 0) {
+                return -1;
+            }
+            if (strpos($b_id, 'gpt-4') === 0 && strpos($a_id, 'gpt-4') !== 0) {
+                return 1;
+            }
+            
+            // gpt-3.5 models second
+            if (strpos($a_id, 'gpt-3.5') === 0 && strpos($b_id, 'gpt-3.5') !== 0) {
+                return -1;
+            }
+            if (strpos($b_id, 'gpt-3.5') === 0 && strpos($a_id, 'gpt-3.5') !== 0) {
+                return 1;
+            }
+            
+            // Otherwise alphabetical
+            return strcmp($a_id, $b_id);
+        });
+        
+        return new \WP_REST_Response([
+            'models' => $chat_models,
+            'default_model' => !empty($chat_models) ? $chat_models[0]['id'] : 'gpt-3.5-turbo'
+        ], 200);
+    }
+    
+    /**
+     * Get model description
+     *
+     * @param string $model_id Model ID
+     * @return string
+     */
+    private function get_model_description($model_id) {
+        $descriptions = [
+            'gpt-4o' => 'GPT-4 Optimized - Most capable model',
+            'gpt-4o-mini' => 'GPT-4 Optimized Mini - Faster and cheaper',
+            'gpt-4-turbo' => 'GPT-4 Turbo - Faster GPT-4',
+            'gpt-4' => 'GPT-4 - Most capable model',
+            'gpt-3.5-turbo' => 'GPT-3.5 Turbo - Fast and cost-effective',
+        ];
+        
+        // Check exact match first
+        if (isset($descriptions[$model_id])) {
+            return $descriptions[$model_id];
+        }
+        
+        // Check prefix matches
+        if (strpos($model_id, 'gpt-4o') === 0) {
+            return 'GPT-4 Optimized model';
+        }
+        if (strpos($model_id, 'gpt-4') === 0) {
+            return 'GPT-4 model';
+        }
+        if (strpos($model_id, 'gpt-3.5') === 0) {
+            return 'GPT-3.5 model';
+        }
+        
+        return 'OpenAI Chat Model';
+    }
+    
+    /**
+     * Get campaigns
+     *
+     * @param \WP_REST_Request $request
+     * @return \WP_REST_Response
+     */
+    public function get_campaigns($request) {
+        $campaign_manager = new \U43\Campaigns\Campaign_Manager();
+        $args = [
+            'status' => $request->get_param('status'),
+            'per_page' => $request->get_param('per_page') ?: 20,
+            'page' => $request->get_param('page') ?: 1
+        ];
+        $campaigns = $campaign_manager->get_campaigns($args);
+        return new \WP_REST_Response($campaigns, 200);
+    }
+    
+    /**
+     * Get campaign
+     *
+     * @param \WP_REST_Request $request
+     * @return \WP_REST_Response|\WP_Error
+     */
+    public function get_campaign($request) {
+        $campaign_id = $request->get_param('id');
+        $campaign_manager = new \U43\Campaigns\Campaign_Manager();
+        $campaign = $campaign_manager->get_campaign($campaign_id);
+        
+        if (!$campaign) {
+            return new \WP_Error('not_found', 'Campaign not found', ['status' => 404]);
+        }
+        
+        return new \WP_REST_Response($campaign, 200);
+    }
+    
+    /**
+     * Create campaign
+     *
+     * @param \WP_REST_Request $request
+     * @return \WP_REST_Response|\WP_Error
+     */
+    public function create_campaign($request) {
+        $data = $request->get_json_params();
+        $campaign_manager = new \U43\Campaigns\Campaign_Manager();
+        $campaign_id = $campaign_manager->create_campaign($data);
+        
+        if (!$campaign_id) {
+            return new \WP_Error('create_failed', 'Failed to create campaign', ['status' => 500]);
+        }
+        
+        return new \WP_REST_Response(['id' => $campaign_id], 201);
+    }
+    
+    /**
+     * Update campaign
+     *
+     * @param \WP_REST_Request $request
+     * @return \WP_REST_Response|\WP_Error
+     */
+    public function update_campaign($request) {
+        $campaign_id = $request->get_param('id');
+        $data = $request->get_json_params();
+        $campaign_manager = new \U43\Campaigns\Campaign_Manager();
+        $result = $campaign_manager->update_campaign($campaign_id, $data);
+        
+        if (!$result) {
+            return new \WP_Error('update_failed', 'Failed to update campaign', ['status' => 500]);
+        }
+        
+        return new \WP_REST_Response(['success' => true], 200);
+    }
+    
+    /**
+     * Start campaign
+     *
+     * @param \WP_REST_Request $request
+     * @return \WP_REST_Response|\WP_Error
+     */
+    public function start_campaign($request) {
+        $campaign_id = $request->get_param('id');
+        $campaign_manager = new \U43\Campaigns\Campaign_Manager();
+        $result = $campaign_manager->start_campaign($campaign_id);
+        
+        if (!$result) {
+            return new \WP_Error('start_failed', 'Failed to start campaign', ['status' => 500]);
+        }
+        
+        return new \WP_REST_Response(['success' => true], 200);
+    }
+    
+    /**
+     * Process campaign batch
+     *
+     * @param \WP_REST_Request $request
+     * @return \WP_REST_Response|\WP_Error
+     */
+    public function process_campaign_batch($request) {
+        $campaign_id = $request->get_param('id');
+        $batch_size = $request->get_param('batch_size') ?: 100;
+        $campaign_manager = new \U43\Campaigns\Campaign_Manager();
+        $result = $campaign_manager->process_campaign_batch($campaign_id, $batch_size);
+        
+        return new \WP_REST_Response($result, 200);
+    }
+    
+    /**
+     * Get campaign logs
+     *
+     * @param \WP_REST_Request $request
+     * @return \WP_REST_Response|\WP_Error
+     */
+    public function get_campaign_logs($request) {
+        $campaign_id = $request->get_param('id');
+        $campaign_manager = new \U43\Campaigns\Campaign_Manager();
+        $args = [
+            'log_type' => $request->get_param('log_type'),
+            'contact_id' => $request->get_param('contact_id'),
+            'per_page' => $request->get_param('per_page') ?: 100,
+            'page' => $request->get_param('page') ?: 1
+        ];
+        $logs = $campaign_manager->get_campaign_logs($campaign_id, $args);
+        return new \WP_REST_Response($logs, 200);
+    }
+    
+    /**
+     * Get campaign delivery logs
+     *
+     * @param \WP_REST_Request $request
+     * @return \WP_REST_Response|\WP_Error
+     */
+    public function get_campaign_delivery_logs($request) {
+        $campaign_id = $request->get_param('id');
+        $campaign_manager = new \U43\Campaigns\Campaign_Manager();
+        $args = [
+            'status' => $request->get_param('status'),
+            'per_page' => $request->get_param('per_page') ?: 50,
+            'page' => $request->get_param('page') ?: 1
+        ];
+        $logs = $campaign_manager->get_campaign_delivery_logs($campaign_id, $args);
+        return new \WP_REST_Response($logs, 200);
+    }
+    
+    /**
+     * Get contacts
+     *
+     * @param \WP_REST_Request $request
+     * @return \WP_REST_Response
+     */
+    public function get_contacts($request) {
+        $contact_manager = new \U43\Campaigns\Contact_Manager();
+        $args = [
+            'folder_id' => $request->get_param('folder_id'),
+            'tag_id' => $request->get_param('tag_id'),
+            'search' => $request->get_param('search'),
+            'per_page' => $request->get_param('per_page') ?: 50,
+            'page' => $request->get_param('page') ?: 1
+        ];
+        $contacts = $contact_manager->get_contacts($args);
+        return new \WP_REST_Response($contacts, 200);
+    }
+    
+    /**
+     * Get contact
+     *
+     * @param \WP_REST_Request $request
+     * @return \WP_REST_Response|\WP_Error
+     */
+    public function get_contact($request) {
+        $contact_id = $request->get_param('id');
+        $contact_manager = new \U43\Campaigns\Contact_Manager();
+        $contact = $contact_manager->get_contact($contact_id);
+        
+        if (!$contact) {
+            return new \WP_Error('not_found', 'Contact not found', ['status' => 404]);
+        }
+        
+        return new \WP_REST_Response($contact, 200);
+    }
+    
+    /**
+     * Create contact
+     *
+     * @param \WP_REST_Request $request
+     * @return \WP_REST_Response|\WP_Error
+     */
+    public function create_contact($request) {
+        try {
+            $data = $request->get_json_params();
+            
+            if (empty($data['phone'])) {
+                return new \WP_Error('missing_phone', 'Phone number is required', ['status' => 400]);
+            }
+            
+            global $wpdb;
+            $table = $wpdb->prefix . 'u43_campaign_contacts';
+            
+            // Check if table exists
+            $table_exists = $wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table));
+            if ($table_exists != $table) {
+                // Try to create tables
+                if (class_exists('\U43\Database\Database')) {
+                    \U43\Database\Database::create_tables();
+                    // Check again
+                    $table_exists = $wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table));
+                    if ($table_exists != $table) {
+                        return new \WP_Error('table_not_found', 'Contacts table does not exist. Please deactivate and reactivate the plugin to create the database tables.', ['status' => 500]);
+                    }
+                } else {
+                    return new \WP_Error('table_not_found', 'Contacts table does not exist. Please activate the plugin to create the database tables.', ['status' => 500]);
+                }
+            }
+            
+            // Ensure Contact_Manager class is loaded
+            if (!class_exists('\U43\Campaigns\Contact_Manager')) {
+                $contact_manager_file = U43_PLUGIN_DIR . 'includes/campaigns/class-contact-manager.php';
+                if (file_exists($contact_manager_file)) {
+                    require_once $contact_manager_file;
+                } else {
+                    return new \WP_Error('class_not_found', 'Contact Manager class file not found', ['status' => 500]);
+                }
+            }
+            
+            $contact_manager = new \U43\Campaigns\Contact_Manager();
+            $contact_id = $contact_manager->create_contact($data);
+            
+            if (!$contact_id) {
+                $error_message = $wpdb->last_error ?: 'Failed to create contact. The phone number may already exist or there was a database error.';
+                return new \WP_Error('create_failed', $error_message, ['status' => 500]);
+            }
+            
+            return new \WP_REST_Response(['id' => $contact_id], 201);
+        } catch (\Exception $e) {
+            error_log('U43: Error creating contact - ' . $e->getMessage());
+            return new \WP_Error('exception', 'An error occurred while creating the contact: ' . $e->getMessage(), ['status' => 500]);
+        }
+    }
+    
+    /**
+     * Update contact
+     *
+     * @param \WP_REST_Request $request
+     * @return \WP_REST_Response|\WP_Error
+     */
+    public function update_contact($request) {
+        $contact_id = $request->get_param('id');
+        $data = $request->get_json_params();
+        $contact_manager = new \U43\Campaigns\Contact_Manager();
+        $result = $contact_manager->update_contact($contact_id, $data);
+        
+        if (!$result) {
+            return new \WP_Error('update_failed', 'Failed to update contact', ['status' => 500]);
+        }
+        
+        return new \WP_REST_Response(['success' => true], 200);
+    }
+    
+    /**
+     * Delete contact
+     *
+     * @param \WP_REST_Request $request
+     * @return \WP_REST_Response|\WP_Error
+     */
+    public function delete_contact($request) {
+        try {
+            $contact_id = $request->get_param('id');
+            
+            if (empty($contact_id)) {
+                return new \WP_Error('missing_id', 'Contact ID is required', ['status' => 400]);
+            }
+            
+            // Ensure Contact_Manager class is loaded
+            if (!class_exists('\U43\Campaigns\Contact_Manager')) {
+                $contact_manager_file = U43_PLUGIN_DIR . 'includes/campaigns/class-contact-manager.php';
+                if (file_exists($contact_manager_file)) {
+                    require_once $contact_manager_file;
+                } else {
+                    return new \WP_Error('class_not_found', 'Contact Manager class file not found', ['status' => 500]);
+                }
+            }
+            
+            $contact_manager = new \U43\Campaigns\Contact_Manager();
+            $result = $contact_manager->delete_contact($contact_id);
+            
+            if (!$result) {
+                global $wpdb;
+                $error_message = $wpdb->last_error ?: 'Failed to delete contact. The contact may not exist or there was a database error.';
+                return new \WP_Error('delete_failed', $error_message, ['status' => 500]);
+            }
+            
+            return new \WP_REST_Response(['success' => true], 200);
+        } catch (\Exception $e) {
+            error_log('U43: Error deleting contact - ' . $e->getMessage());
+            return new \WP_Error('exception', 'An error occurred while deleting the contact: ' . $e->getMessage(), ['status' => 500]);
+        }
+    }
+    
+    /**
+     * Import contacts
+     *
+     * @param \WP_REST_Request $request
+     * @return \WP_REST_Response|\WP_Error
+     */
+    public function import_contacts($request) {
+        $files = $request->get_file_params();
+        
+        if (empty($files['file'])) {
+            return new \WP_Error('no_file', 'No file uploaded', ['status' => 400]);
+        }
+        
+        $file = $files['file'];
+        
+        if ($file['error'] !== UPLOAD_ERR_OK) {
+            return new \WP_Error('upload_error', 'File upload error', ['status' => 400]);
+        }
+        
+        $options = $request->get_param('options') ?: [];
+        $contact_manager = new \U43\Campaigns\Contact_Manager();
+        $result = $contact_manager->import_contacts_from_csv($file['tmp_name'], $options);
+        
+        return new \WP_REST_Response($result, 200);
+    }
+    
+    /**
+     * Get tags
+     *
+     * @param \WP_REST_Request $request
+     * @return \WP_REST_Response
+     */
+    public function get_tags($request) {
+        $contact_manager = new \U43\Campaigns\Contact_Manager();
+        $tags = $contact_manager->get_tags();
+        return new \WP_REST_Response($tags, 200);
+    }
+    
+    /**
+     * Get folders
+     *
+     * @param \WP_REST_Request $request
+     * @return \WP_REST_Response
+     */
+    public function get_folders($request) {
+        $contact_manager = new \U43\Campaigns\Contact_Manager();
+        $folders = $contact_manager->get_folders();
+        return new \WP_REST_Response($folders, 200);
+    }
+    
+    /**
+     * Create tag
+     *
+     * @param \WP_REST_Request $request
+     * @return \WP_REST_Response|\WP_Error
+     */
+    public function create_tag($request) {
+        try {
+            $data = $request->get_json_params();
+            
+            if (empty($data['name'])) {
+                return new \WP_Error('missing_name', 'Tag name is required', ['status' => 400]);
+            }
+            
+            global $wpdb;
+            $table = $wpdb->prefix . 'u43_campaign_tags';
+            
+            // Check if table exists
+            $table_exists = $wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table));
+            if ($table_exists != $table) {
+                // Try to create tables
+                if (class_exists('\U43\Database\Database')) {
+                    \U43\Database\Database::create_tables();
+                    // Check again
+                    $table_exists = $wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table));
+                    if ($table_exists != $table) {
+                        return new \WP_Error('table_not_found', 'Campaign tags table does not exist. Please deactivate and reactivate the plugin to create the database tables.', ['status' => 500]);
+                    }
+                } else {
+                    return new \WP_Error('table_not_found', 'Campaign tags table does not exist. Please activate the plugin to create the database tables.', ['status' => 500]);
+                }
+            }
+            
+            // Ensure Contact_Manager class is loaded
+            if (!class_exists('\U43\Campaigns\Contact_Manager')) {
+                $contact_manager_file = U43_PLUGIN_DIR . 'includes/campaigns/class-contact-manager.php';
+                if (file_exists($contact_manager_file)) {
+                    require_once $contact_manager_file;
+                } else {
+                    return new \WP_Error('class_not_found', 'Contact Manager class file not found', ['status' => 500]);
+                }
+            }
+            
+            $contact_manager = new \U43\Campaigns\Contact_Manager();
+            $tag_id = $contact_manager->create_tag($data);
+            
+            if (!$tag_id) {
+                $error_message = $wpdb->last_error ?: 'Failed to create tag. Please check if the tag name already exists or contact support.';
+                return new \WP_Error('create_failed', $error_message, ['status' => 500]);
+            }
+            
+            return new \WP_REST_Response(['id' => $tag_id], 201);
+        } catch (\Exception $e) {
+            error_log('U43: Error creating tag - ' . $e->getMessage());
+            return new \WP_Error('exception', 'An error occurred while creating the tag: ' . $e->getMessage(), ['status' => 500]);
+        }
+    }
+    
+    /**
+     * Create folder
+     *
+     * @param \WP_REST_Request $request
+     * @return \WP_REST_Response|\WP_Error
+     */
+    public function create_folder($request) {
+        try {
+            $data = $request->get_json_params();
+            
+            if (empty($data['name'])) {
+                return new \WP_Error('missing_name', 'Folder name is required', ['status' => 400]);
+            }
+            
+            global $wpdb;
+            $table = $wpdb->prefix . 'u43_campaign_folders';
+            
+            // Check if table exists
+            $table_exists = $wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table));
+            if ($table_exists != $table) {
+                // Try to create tables
+                if (class_exists('\U43\Database\Database')) {
+                    \U43\Database\Database::create_tables();
+                    // Check again
+                    $table_exists = $wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table));
+                    if ($table_exists != $table) {
+                        return new \WP_Error('table_not_found', 'Campaign folders table does not exist. Please deactivate and reactivate the plugin to create the database tables.', ['status' => 500]);
+                    }
+                } else {
+                    return new \WP_Error('table_not_found', 'Campaign folders table does not exist. Please activate the plugin to create the database tables.', ['status' => 500]);
+                }
+            }
+            
+            // Ensure Contact_Manager class is loaded
+            if (!class_exists('\U43\Campaigns\Contact_Manager')) {
+                $contact_manager_file = U43_PLUGIN_DIR . 'includes/campaigns/class-contact-manager.php';
+                if (file_exists($contact_manager_file)) {
+                    require_once $contact_manager_file;
+                } else {
+                    return new \WP_Error('class_not_found', 'Contact Manager class file not found', ['status' => 500]);
+                }
+            }
+            
+            $contact_manager = new \U43\Campaigns\Contact_Manager();
+            $folder_id = $contact_manager->create_folder($data);
+            
+            if (!$folder_id) {
+                $error_message = $wpdb->last_error ?: 'Failed to create folder. Please check if the folder name already exists or contact support.';
+                return new \WP_Error('create_failed', $error_message, ['status' => 500]);
+            }
+            
+            return new \WP_REST_Response(['id' => $folder_id], 201);
+        } catch (\Exception $e) {
+            error_log('U43: Error creating folder - ' . $e->getMessage());
+            return new \WP_Error('exception', 'An error occurred while creating the folder: ' . $e->getMessage(), ['status' => 500]);
         }
     }
 }

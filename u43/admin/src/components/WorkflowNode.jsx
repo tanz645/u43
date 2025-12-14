@@ -184,6 +184,9 @@ export default function WorkflowNode({ id, data, selected }) {
     const colorMap = {
       'decision': { class: 'bg-blue-500', hex: '#3b82f6' },
       'reasoning': { class: 'bg-amber-500', hex: '#f59e0b' },
+      'response': { class: 'bg-blue-500', hex: '#3b82f6' },
+      'tokens_used': { class: 'bg-orange-500', hex: '#f97316' },
+      'model_used': { class: 'bg-indigo-500', hex: '#6366f1' },
       'true': { class: 'bg-green-500', hex: '#10b981' },
       'false': { class: 'bg-red-500', hex: '#ef4444' },
     };

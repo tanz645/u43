@@ -84,6 +84,13 @@ class Core {
             }
         }
         
+        // Initialize campaign processor
+        try {
+            new \U43\Campaigns\Campaign_Processor();
+        } catch (\Exception $e) {
+            error_log('U43: Error initializing campaign processor - ' . $e->getMessage());
+        }
+        
         // Hook into WordPress
         $this->init_hooks();
     }

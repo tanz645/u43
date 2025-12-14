@@ -7,6 +7,8 @@ export default function NodeConfigPanel() {
   const [toolConfig, setToolConfig] = useState(null);
   const [loadingToolConfig, setLoadingToolConfig] = useState(false);
   const [showVariableInfo, setShowVariableInfo] = useState(false);
+  const [openaiModels, setOpenaiModels] = useState([]);
+  const [loadingModels, setLoadingModels] = useState(false);
   const promptTextareaRef = useRef(null);
   
   // Find connected source nodes for condition nodes, agent nodes, and action nodes
@@ -47,6 +49,51 @@ export default function NodeConfigPanel() {
   
   const connectedSourceNodes = getConnectedSourceNodes();
   const triggerNodes = getTriggerNodes();
+  
+  // Fetch OpenAI models
+  const fetchOpenAIModels = async (currentConfig = null) => {
+    if (!window.u43RestUrl) {
+      console.warn('REST URL not available');
+      return;
+    }
+    
+    try {
+      setLoadingModels(true);
+      const response = await fetch(`${window.u43RestUrl}openai/models`, {
+        headers: {
+          'X-WP-Nonce': window.u43RestNonce || '',
+        },
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setOpenaiModels(data.models || []);
+        
+        // Set default model if not set and models are available
+        const configToCheck = currentConfig || config;
+        if (data.models && data.models.length > 0 && !configToCheck.settings?.model) {
+          const defaultModel = data.default_model || data.models[0].id;
+          setConfig(prevConfig => ({
+            ...prevConfig,
+            settings: {
+              ...prevConfig.settings,
+              model: defaultModel,
+              provider: prevConfig.settings?.provider || 'openai'
+            }
+          }));
+        }
+      } else {
+        console.warn('Failed to fetch OpenAI models:', response.status);
+        // Set empty array on error
+        setOpenaiModels([]);
+      }
+    } catch (error) {
+      console.error('Error fetching OpenAI models:', error);
+      setOpenaiModels([]);
+    } finally {
+      setLoadingModels(false);
+    }
+  };
   
   // Fetch tool configuration from cache or API
   const fetchToolConfig = async (toolId) => {
@@ -152,6 +199,10 @@ export default function NodeConfigPanel() {
         } else {
           setToolConfig(null);
         }
+      } else if (selectedNode.data.nodeType === 'agent') {
+        // For agent nodes, fetch OpenAI models
+        setConfig(nodeConfig);
+        fetchOpenAIModels(nodeConfig);
       } else {
         setConfig(nodeConfig);
         setToolConfig(null);
@@ -302,21 +353,48 @@ export default function NodeConfigPanel() {
         
         {selectedNode?.data?.nodeType === 'agent' && (
           <div className="space-y-4">
-            {/* Model Information */}
-            <div className="p-3 bg-gray-50 border border-gray-200 rounded-md">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-semibold text-gray-700 mb-1">AI Model</p>
-                  <p className="text-sm text-gray-900">
-                    {config.settings?.model || 'gpt-3.5-turbo'}
-                  </p>
+            {/* Model Selection */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                AI Model
+              </label>
+              {loadingModels ? (
+                <div className="px-3 py-2 border border-gray-300 rounded-md bg-gray-50">
+                  <span className="text-sm text-gray-500">Loading models...</span>
                 </div>
-                {config.settings?.provider && (
-                  <div className="text-xs text-gray-500">
-                    Provider: {config.settings.provider}
-                  </div>
-                )}
-              </div>
+              ) : openaiModels.length > 0 ? (
+                <select
+                  value={config.settings?.model || (openaiModels[0]?.id || 'gpt-3.5-turbo')}
+                  onChange={(e) => {
+                    setConfig({
+                      ...config,
+                      settings: {
+                        ...config.settings,
+                        model: e.target.value,
+                        provider: config.settings?.provider || 'openai'
+                      }
+                    });
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  {openaiModels.map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.name} {model.description ? `- ${model.description}` : ''}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <div className="px-3 py-2 border border-gray-300 rounded-md bg-gray-50">
+                  <span className="text-sm text-gray-500">
+                    {config.settings?.model || 'gpt-3.5-turbo'} (API key not configured or models unavailable)
+                  </span>
+                </div>
+              )}
+              {config.settings?.provider && (
+                <p className="text-xs text-gray-500 mt-1">
+                  Provider: {config.settings.provider}
+                </p>
+              )}
             </div>
             
             <div>

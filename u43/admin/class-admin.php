@@ -133,6 +133,34 @@ class Admin {
             'u43-settings',
             [$this, 'render_settings']
         );
+        
+        // Campaigns submenu
+        add_submenu_page(
+            'u43',
+            __('Campaigns', 'u43'),
+            __('Campaigns', 'u43'),
+            'manage_options',
+            'u43-campaigns',
+            [$this, 'render_campaigns']
+        );
+        
+        add_submenu_page(
+            'u43',
+            __('Contacts', 'u43'),
+            __('Contacts', 'u43'),
+            'manage_options',
+            'u43-contacts',
+            [$this, 'render_contacts']
+        );
+        
+        add_submenu_page(
+            'u43',
+            __('Segments', 'u43'),
+            __('Segments', 'u43'),
+            'manage_options',
+            'u43-segments',
+            [$this, 'render_segments']
+        );
     }
     
     /**
@@ -384,6 +412,27 @@ class Admin {
         }
         
         include U43_PLUGIN_DIR . 'admin/views/settings.php';
+    }
+    
+    /**
+     * Render campaigns page
+     */
+    public function render_campaigns() {
+        include U43_PLUGIN_DIR . 'admin/views/campaigns.php';
+    }
+    
+    /**
+     * Render contacts page
+     */
+    public function render_contacts() {
+        include U43_PLUGIN_DIR . 'admin/views/contacts.php';
+    }
+    
+    /**
+     * Render segments page
+     */
+    public function render_segments() {
+        include U43_PLUGIN_DIR . 'admin/views/segments.php';
     }
     
 }

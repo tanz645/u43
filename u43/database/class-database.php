@@ -96,6 +96,140 @@ class Database {
         ) $charset_collate;";
         
         dbDelta($sql);
+        
+        // Campaigns tables
+        self::create_campaigns_tables($charset_collate);
+    }
+    
+    /**
+     * Create campaigns-related database tables
+     *
+     * @param string $charset_collate Database charset collate
+     */
+    private static function create_campaigns_tables($charset_collate) {
+        global $wpdb;
+        
+        require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+        
+        // Folders table
+        $folders_table = $wpdb->prefix . 'u43_campaign_folders';
+        $sql = "CREATE TABLE $folders_table (
+            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(255) NOT NULL,
+            description TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            created_by BIGINT UNSIGNED,
+            INDEX idx_name (name)
+        ) $charset_collate;";
+        dbDelta($sql);
+        
+        // Tags table
+        $tags_table = $wpdb->prefix . 'u43_campaign_tags';
+        $sql = "CREATE TABLE $tags_table (
+            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(100) NOT NULL,
+            color VARCHAR(7) DEFAULT '#0073aa',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY unique_name (name)
+        ) $charset_collate;";
+        dbDelta($sql);
+        
+        // Contacts table
+        $contacts_table = $wpdb->prefix . 'u43_campaign_contacts';
+        $sql = "CREATE TABLE $contacts_table (
+            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(255) NOT NULL,
+            phone VARCHAR(20) NOT NULL,
+            folder_id BIGINT UNSIGNED,
+            notes TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            created_by BIGINT UNSIGNED,
+            UNIQUE KEY unique_phone (phone),
+            INDEX idx_folder_id (folder_id),
+            INDEX idx_name (name),
+            INDEX idx_phone (phone)
+        ) $charset_collate;";
+        dbDelta($sql);
+        
+        // Contact tags relationship table
+        $contact_tags_table = $wpdb->prefix . 'u43_campaign_contact_tags';
+        $sql = "CREATE TABLE $contact_tags_table (
+            contact_id BIGINT UNSIGNED NOT NULL,
+            tag_id BIGINT UNSIGNED NOT NULL,
+            PRIMARY KEY (contact_id, tag_id),
+            INDEX idx_tag_id (tag_id)
+        ) $charset_collate;";
+        dbDelta($sql);
+        
+        // Campaigns table
+        $campaigns_table = $wpdb->prefix . 'u43_campaigns';
+        $sql = "CREATE TABLE $campaigns_table (
+            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(255) NOT NULL,
+            description TEXT,
+            message_text TEXT,
+            template_name VARCHAR(255),
+            template_params LONGTEXT,
+            target_type ENUM('all', 'tags', 'folder') DEFAULT 'all',
+            target_value LONGTEXT,
+            schedule_type ENUM('immediate', 'scheduled') DEFAULT 'immediate',
+            scheduled_at DATETIME,
+            status ENUM('draft', 'scheduled', 'running', 'completed', 'paused', 'cancelled') DEFAULT 'draft',
+            batch_size INT DEFAULT 100,
+            total_contacts INT DEFAULT 0,
+            sent_count INT DEFAULT 0,
+            failed_count INT DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            started_at DATETIME,
+            completed_at DATETIME,
+            created_by BIGINT UNSIGNED,
+            INDEX idx_status (status),
+            INDEX idx_scheduled_at (scheduled_at),
+            INDEX idx_created_at (created_at)
+        ) $charset_collate;";
+        dbDelta($sql);
+        
+        // Campaign contacts table (tracks which contacts are in which campaign)
+        $campaign_contacts_table = $wpdb->prefix . 'u43_campaign_contacts_rel';
+        $sql = "CREATE TABLE $campaign_contacts_table (
+            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            campaign_id BIGINT UNSIGNED NOT NULL,
+            contact_id BIGINT UNSIGNED NOT NULL,
+            status ENUM('pending', 'sent', 'failed', 'delivered', 'read') DEFAULT 'pending',
+            sent_at DATETIME,
+            delivered_at DATETIME,
+            read_at DATETIME,
+            error_message TEXT,
+            retry_count INT DEFAULT 0,
+            whatsapp_message_id VARCHAR(255),
+            INDEX idx_campaign_id (campaign_id),
+            INDEX idx_contact_id (contact_id),
+            INDEX idx_status (status),
+            INDEX idx_sent_at (sent_at)
+        ) $charset_collate;";
+        dbDelta($sql);
+        
+        // Campaign logs table (detailed logs per contact)
+        $campaign_logs_table = $wpdb->prefix . 'u43_campaign_logs';
+        $sql = "CREATE TABLE $campaign_logs_table (
+            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            campaign_id BIGINT UNSIGNED NOT NULL,
+            contact_id BIGINT UNSIGNED NOT NULL,
+            campaign_contact_id BIGINT UNSIGNED,
+            log_type ENUM('info', 'success', 'error', 'warning') DEFAULT 'info',
+            message TEXT NOT NULL,
+            metadata LONGTEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_campaign_id (campaign_id),
+            INDEX idx_contact_id (contact_id),
+            INDEX idx_campaign_contact_id (campaign_contact_id),
+            INDEX idx_log_type (log_type),
+            INDEX idx_created_at (created_at)
+        ) $charset_collate;";
+        dbDelta($sql);
     }
 }
 

@@ -290,6 +290,126 @@ class WhatsApp_API_Client {
     }
     
     /**
+     * Send marketing message (template message)
+     * Marketing messages must use approved templates
+     *
+     * @param string $to Phone number
+     * @param string $template_name Template name (must be approved)
+     * @param array $template_params Template parameters
+     * @param string $language_code Language code (default: en_US)
+     * @return array
+     */
+    public function send_marketing_message($to, $template_name, $template_params = [], $language_code = 'en_US') {
+        $phone_number_id = get_option('u43_whatsapp_phone_number_id', '');
+        
+        if (empty($phone_number_id)) {
+            return [
+                'success' => false,
+                'message' => 'Phone number ID not configured. Please configure it in WhatsApp settings.'
+            ];
+        }
+        
+        $url = $this->api_base_url . '/' . $phone_number_id . '/messages';
+        
+        $data = [
+            'messaging_product' => 'whatsapp',
+            'to' => $this->format_phone_number($to),
+            'type' => 'template',
+            'template' => [
+                'name' => $template_name,
+                'language' => [
+                    'code' => $language_code
+                ]
+            ]
+        ];
+        
+        // Add template parameters if provided
+        if (!empty($template_params)) {
+            $components = [];
+            
+            // Body parameters
+            if (isset($template_params['body']) && is_array($template_params['body'])) {
+                $components[] = [
+                    'type' => 'body',
+                    'parameters' => array_map(function($param) {
+                        return [
+                            'type' => 'text',
+                            'text' => $param
+                        ];
+                    }, $template_params['body'])
+                ];
+            }
+            
+            // Header parameters (for media or text headers)
+            if (isset($template_params['header']) && is_array($template_params['header'])) {
+                $header_params = [];
+                foreach ($template_params['header'] as $param) {
+                    if (isset($param['type']) && $param['type'] === 'image') {
+                        $header_params[] = [
+                            'type' => 'image',
+                            'image' => [
+                                'link' => $param['link']
+                            ]
+                        ];
+                    } else {
+                        $header_params[] = [
+                            'type' => 'text',
+                            'text' => is_array($param) ? $param['text'] : $param
+                        ];
+                    }
+                }
+                if (!empty($header_params)) {
+                    $components[] = [
+                        'type' => 'header',
+                        'parameters' => $header_params
+                    ];
+                }
+            }
+            
+            // Button parameters
+            if (isset($template_params['buttons']) && is_array($template_params['buttons'])) {
+                $button_params = [];
+                foreach ($template_params['buttons'] as $index => $button) {
+                    if (isset($button['type']) && $button['type'] === 'url') {
+                        $button_params[] = [
+                            'type' => 'button',
+                            'sub_type' => 'url',
+                            'index' => $index,
+                            'parameters' => [
+                                [
+                                    'type' => 'text',
+                                    'text' => $button['url']
+                                ]
+                            ]
+                        ];
+                    } elseif (isset($button['type']) && $button['type'] === 'quick_reply') {
+                        $button_params[] = [
+                            'type' => 'button',
+                            'sub_type' => 'quick_reply',
+                            'index' => $index,
+                            'parameters' => [
+                                [
+                                    'type' => 'payload',
+                                    'payload' => $button['payload']
+                                ]
+                            ]
+                        ];
+                    }
+                }
+                if (!empty($button_params)) {
+                    $components = array_merge($components, $button_params);
+                }
+            }
+            
+            if (!empty($components)) {
+                $data['template']['components'] = $components;
+            }
+        }
+        
+        return $this->make_request('POST', $url, $data);
+    }
+    
+    /**
      * Format phone number
      *
      * @param string $phone_number Phone number

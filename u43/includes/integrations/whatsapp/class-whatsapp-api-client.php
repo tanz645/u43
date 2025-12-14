@@ -382,7 +382,7 @@ class WhatsApp_API_Client {
         // WhatsApp Cloud API requires phone numbers without + prefix
         // Return digits only if formatting for API
         if ($for_api) {
-            return $phone_number;
+        return $phone_number;
         }
         
         // Return with + prefix for display/storage

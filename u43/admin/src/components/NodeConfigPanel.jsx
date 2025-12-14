@@ -962,8 +962,8 @@ export default function NodeConfigPanel() {
                                           value: `{{${nodeId}.${key}}}`,
                                           displayValue: `{{node.${key}}}`
                                         }));
-                                      }
-                                    }
+                      }
+                    }
                                   } else {
                                     // For other node types, show generic output
                                     suggestions = [

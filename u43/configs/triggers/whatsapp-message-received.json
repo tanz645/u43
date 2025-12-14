@@ -57,6 +57,18 @@
     "button_title": {
       "type": "string",
       "label": "Button Title"
+    },
+    "list_reply_id": {
+      "type": "string",
+      "label": "List Reply ID"
+    },
+    "list_reply_title": {
+      "type": "string",
+      "label": "List Reply Title"
+    },
+    "list_reply_description": {
+      "type": "string",
+      "label": "List Reply Description"
     }
   },
   "handler": "U43\\Triggers\\WhatsApp\\Message_Received_Trigger"

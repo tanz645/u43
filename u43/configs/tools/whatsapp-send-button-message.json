@@ -62,6 +62,18 @@
     "sent_to": {
       "type": "array",
       "label": "Sent To"
+    },
+    "interactive_type": {
+      "type": "string",
+      "label": "Interactive Type"
+    },
+    "button_id": {
+      "type": "string",
+      "label": "Button ID"
+    },
+    "button_title": {
+      "type": "string",
+      "label": "Button Title"
     }
   },
   "handler": "U43\\Tools\\WhatsApp\\Send_Button_Message"

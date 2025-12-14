@@ -913,7 +913,7 @@ class REST_API {
                 // Handle messages
                 if ($field === 'messages' && isset($value['messages'])) {
                     foreach ($value['messages'] as $message) {
-                        $this->trigger_message_received($message, $value);
+                        $this->trigger_message_received($message, $value, $body);
                     }
                 }
                 
@@ -939,8 +939,9 @@ class REST_API {
      *
      * @param array $message Message data
      * @param array $value Webhook value
+     * @param array $webhook_body Full webhook request body (for logging)
      */
-    private function trigger_message_received($message, $value) {
+    private function trigger_message_received($message, $value, $webhook_body = []) {
         $triggers_registry = U43()->get_triggers_registry();
         
         // Extract contact information (name) from contacts array
@@ -968,14 +969,67 @@ class REST_API {
             'timestamp' => isset($message['timestamp']) ? (int)$message['timestamp'] : time(),
         ];
         
-        // Handle interactive messages (button clicks)
-        if (isset($message['interactive']) && $message['interactive']['type'] === 'button_reply') {
+        // Handle interactive messages (button clicks and list replies)
+        if (isset($message['interactive'])) {
             $interactive = $message['interactive'];
+            $interactive_type = $interactive['type'] ?? '';
+            
             $data['message_type'] = 'interactive';
-            $data['interactive_type'] = 'button_reply';
-            $data['button_id'] = $interactive['button_reply']['id'] ?? '';
-            $data['button_title'] = $interactive['button_reply']['title'] ?? '';
-            $data['message_text'] = $data['button_title']; // Use button title as message text
+            $data['interactive_type'] = $interactive_type;
+            
+            // Handle button replies
+            if ($interactive_type === 'button_reply' && isset($interactive['button_reply'])) {
+                $data['button_id'] = $interactive['button_reply']['id'] ?? '';
+                $data['button_title'] = $interactive['button_reply']['title'] ?? '';
+                $data['message_text'] = $data['button_title']; // Use button title as message text
+                
+                // Check if this is a button reply to a button message we sent
+                // WhatsApp includes context.id which is the original message ID
+                $original_message_id = $message['context']['id'] ?? '';
+                
+                if (!empty($original_message_id) && !empty($data['button_id'])) {
+                    // Try to continue workflow execution from button message node
+                    $executor = U43()->get_executor();
+                    $button_data = [
+                        'button_id' => $data['button_id'],
+                        'button_title' => $data['button_title'],
+                        'interactive_type' => 'button_reply',
+                    ];
+                    
+                    try {
+                        // Use Button Continuation Service directly
+                        $continuation_result = \U43\Executor\Handlers\WhatsApp\Button_Continuation_Service::continue_from_button_message($original_message_id, $data['button_id'], $button_data);
+                        
+                        if ($continuation_result) {
+                            error_log("U43 WhatsApp Webhook: Continued workflow execution from button message. Execution ID: {$continuation_result}");
+                            // Don't trigger whatsapp_message_received trigger for button clicks that continue workflows
+                            // The workflow continuation handles the routing
+                            return;
+                        } else {
+                            $error_msg = "Could not continue workflow from button message (message_id: {$original_message_id}, button_id: {$data['button_id']}). Check execution logs for details.";
+                            error_log("U43 WhatsApp Webhook: {$error_msg}");
+                            // Continue to trigger whatsapp_message_received as fallback
+                        }
+                    } catch (\Exception $e) {
+                        $error_msg = "Exception while continuing workflow from button message: " . $e->getMessage();
+                        error_log("U43 WhatsApp Webhook: {$error_msg}");
+                        error_log("U43 WhatsApp Webhook: Stack trace: " . $e->getTraceAsString());
+                        // Continue to trigger whatsapp_message_received as fallback
+                    }
+                }
+            }
+            // Handle list replies
+            elseif ($interactive_type === 'list_reply' && isset($interactive['list_reply'])) {
+                $data['list_reply_id'] = $interactive['list_reply']['id'] ?? '';
+                $data['list_reply_title'] = $interactive['list_reply']['title'] ?? '';
+                $data['list_reply_description'] = $interactive['list_reply']['description'] ?? '';
+                $data['message_text'] = $data['list_reply_title']; // Use list reply title as message text
+                
+                // For list replies, we can also use button_id field for consistency
+                // (list_reply.id can be treated similarly to button_id for routing)
+                $data['button_id'] = $data['list_reply_id'];
+                $data['button_title'] = $data['list_reply_title'];
+            }
         }
         
         // Handle media messages
@@ -991,6 +1045,11 @@ class REST_API {
         } elseif (isset($message['audio'])) {
             $data['media_url'] = $message['audio']['id'] ?? '';
             $data['media_type'] = 'audio';
+        }
+        
+        // Include webhook request body in trigger data for reference
+        if (!empty($webhook_body)) {
+            $data['_webhook_body'] = $webhook_body;
         }
         
         error_log('U43 WhatsApp Webhook: Triggering whatsapp_message_received with data: ' . json_encode($data));

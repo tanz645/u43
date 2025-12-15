@@ -42,7 +42,7 @@
   "handler": "U43\\Agents\\Built_In\\LLM_Chat_Agent\\LLM_Chat_Agent",
   "settings": {
     "provider": "openai",
-    "model": "gpt-3.5-turbo",
+    "model": "gpt-5",
     "temperature": 0.7,
     "system_prompt": "You are a helpful assistant."
   }

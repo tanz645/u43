@@ -110,9 +110,10 @@ class Flow_Manager {
      * Get workflows by trigger
      *
      * @param string $trigger_id Trigger ID
+     * @param array $trigger_data Optional trigger data for filtering
      * @return array
      */
-    public function get_workflows_by_trigger($trigger_id) {
+    public function get_workflows_by_trigger($trigger_id, $trigger_data = []) {
         global $wpdb;
         
         $workflows = $wpdb->get_results(
@@ -133,15 +134,65 @@ class Flow_Manager {
                     $node_trigger_type = $node['trigger_type'] ?? $node['config']['trigger_type'] ?? '';
                     error_log("U43: Checking workflow ID {$workflow->id} - trigger type: '{$node_trigger_type}' vs '{$trigger_id}'");
                     if ($node_trigger_type === $trigger_id) {
-                    $matching_workflows[] = $workflow;
+                        // Check if filter is enabled and if trigger data matches filter conditions
+                        $filter = $node['config']['filter'] ?? null;
+                        if ($filter && isset($filter['enabled']) && $filter['enabled'] === true) {
+                            if (!$this->matches_filter($filter, $trigger_data)) {
+                                error_log("U43: Workflow ID {$workflow->id} does not match filter conditions");
+                                break;
+                            }
+                        }
+                        $matching_workflows[] = $workflow;
                         error_log("U43: Workflow ID {$workflow->id} matches trigger '{$trigger_id}'");
-                    break;
+                        break;
                     }
                 }
             }
         }
         
         return $matching_workflows;
+    }
+    
+    /**
+     * Check if trigger data matches filter conditions
+     *
+     * @param array $filter Filter configuration
+     * @param array $trigger_data Trigger data
+     * @return bool
+     */
+    private function matches_filter($filter, $trigger_data) {
+        // If filter is not enabled, always match
+        if (!isset($filter['enabled']) || $filter['enabled'] !== true) {
+            return true;
+        }
+        
+        // Get field to compare (default to message_text)
+        $field = $filter['field'] ?? 'message_text';
+        $match_type = $filter['match_type'] ?? 'exact';
+        $filter_value = $filter['value'] ?? '';
+        
+        // If filter value is empty, don't filter (match all)
+        if (empty($filter_value)) {
+            return true;
+        }
+        
+        // Get the actual value from trigger data
+        $actual_value = $trigger_data[$field] ?? '';
+        
+        // Convert to string for comparison
+        $actual_value = (string) $actual_value;
+        $filter_value = (string) $filter_value;
+        
+        // Perform matching based on match type
+        switch ($match_type) {
+            case 'exact':
+                return $actual_value === $filter_value;
+            case 'contains':
+                return stripos($actual_value, $filter_value) !== false;
+            default:
+                // Unknown match type, default to exact match
+                return $actual_value === $filter_value;
+        }
     }
     
     /**

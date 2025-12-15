@@ -55,14 +55,18 @@ function transformApiNodes(apiData) {
   // Transform tools (actions)
   if (apiData.tools) {
     Object.entries(apiData.tools).forEach(([id, tool]) => {
-      // Determine category based on ID
-      let category = 'General';
-      if (id.startsWith('whatsapp_')) {
-        category = 'WhatsApp';
-      } else if (id.startsWith('wordpress_')) {
-        category = 'WordPress';
-      } else if (id.startsWith('woocommerce_')) {
-        category = 'WooCommerce';
+      // Determine category based on ID or config
+      let category = tool.category || 'General';
+      if (!tool.category) {
+        if (id.startsWith('whatsapp_')) {
+          category = 'WhatsApp';
+        } else if (id.startsWith('wordpress_')) {
+          category = 'WordPress';
+        } else if (id.startsWith('woocommerce_')) {
+          category = 'WooCommerce';
+        } else if (id.startsWith('http_')) {
+          category = 'HTTP';
+        }
       }
       
       nodes.push({

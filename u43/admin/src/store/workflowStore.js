@@ -306,6 +306,80 @@ export const useWorkflowStore = create((set, get) => ({
     });
   },
   
+  duplicateNode: (nodeId) => {
+    try {
+      const state = get();
+      const originalNode = state.nodes.find(n => n.id === nodeId);
+      
+      if (!originalNode) {
+        console.error('Node not found for duplication:', nodeId);
+        return null;
+      }
+      
+      // Helper function to remove variable references from config values
+      const removeVariables = (value) => {
+        if (typeof value === 'string') {
+          // Remove template variables like {{node_id.field}} or {{trigger_data.field}}
+          return value.replace(/\{\{[^}]+\}\}/g, '').trim();
+        } else if (Array.isArray(value)) {
+          return value.map(item => removeVariables(item));
+        } else if (value && typeof value === 'object') {
+          const cleaned = {};
+          for (const key in value) {
+            cleaned[key] = removeVariables(value[key]);
+          }
+          return cleaned;
+        }
+        return value;
+      };
+      
+      // Create new node ID
+      const newNodeId = `node_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
+      // Position the duplicate node offset to the right and slightly down
+      const offsetX = 200;
+      const offsetY = 50;
+      const newPosition = {
+        x: originalNode.position.x + offsetX,
+        y: originalNode.position.y + offsetY,
+      };
+      
+      // Deep clone and clean the config
+      const cleanedConfig = removeVariables(originalNode.data.config || {});
+      
+      // Deep clone the node data to avoid reference issues
+      const duplicatedNode = {
+        id: newNodeId,
+        type: originalNode.type,
+        position: newPosition,
+        data: {
+          ...originalNode.data,
+          label: `${originalNode.data.label} (Copy)`,
+          config: {
+            ...cleanedConfig,
+            title: `${originalNode.data.config?.title || originalNode.data.label} (Copy)`,
+          },
+        },
+      };
+      
+      // Add the duplicated node (no edges - not connected to parent)
+      set({
+        nodes: [...state.nodes, duplicatedNode],
+      });
+      
+      // Select the duplicated node
+      set({
+        selectedNode: duplicatedNode,
+        showConfigPanel: true,
+      });
+      
+      return duplicatedNode;
+    } catch (error) {
+      console.error('Error duplicating node:', error, { nodeId });
+      return null;
+    }
+  },
+  
   toggleNodePalette: () => {
     set({ showNodePalette: !get().showNodePalette });
   },

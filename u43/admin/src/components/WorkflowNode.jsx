@@ -9,7 +9,7 @@ import { renderIcon, iconMap } from './Icons';
 export default function WorkflowNode({ id, data, selected }) {
   // Safely get nodeType with fallback
   const nodeType = data?.nodeType || 'action';
-  const { updateNode, deleteNode, selectNode, toolConfigs, triggerConfigs, agentConfigs } = useWorkflowStore();
+  const { updateNode, deleteNode, duplicateNode, selectNode, toolConfigs, triggerConfigs, agentConfigs } = useWorkflowStore();
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [title, setTitle] = useState(data?.label || data?.config?.title || 'Untitled Node');
   const [showOutputs, setShowOutputs] = useState(false);
@@ -79,6 +79,11 @@ export default function WorkflowNode({ id, data, selected }) {
     if (confirm('Are you sure you want to delete this node?')) {
       deleteNode(id);
     }
+  };
+  
+  const handleDuplicate = (e) => {
+    e.stopPropagation();
+    duplicateNode(id);
   };
   
   const handleNodeClick = () => {
@@ -257,16 +262,28 @@ export default function WorkflowNode({ id, data, selected }) {
             <div className={`w-3 h-3 rounded-full flex-shrink-0 ${nodeTypeColors[nodeType] || 'bg-gray-500'}`} />
           )}
           <div className="text-xs text-gray-500 flex-shrink-0">{nodeTypeLabels[nodeType]}</div>
-          <button
-            onClick={handleDelete}
-            onMouseDown={(e) => e.stopPropagation()}
-            className="ml-auto text-gray-400 hover:text-red-600 transition-colors flex-shrink-0 p-1 rounded hover:bg-red-50"
-            title="Delete node"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-            </svg>
-          </button>
+          <div className="ml-auto flex items-center gap-1">
+            <button
+              onClick={handleDuplicate}
+              onMouseDown={(e) => e.stopPropagation()}
+              className="text-gray-400 hover:text-blue-600 transition-colors flex-shrink-0 p-1 rounded hover:bg-blue-50"
+              title="Duplicate node"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+            </button>
+            <button
+              onClick={handleDelete}
+              onMouseDown={(e) => e.stopPropagation()}
+              className="text-gray-400 hover:text-red-600 transition-colors flex-shrink-0 p-1 rounded hover:bg-red-50"
+              title="Delete node"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+            </button>
+          </div>
         </div>
         
         {/* Editable Title */}

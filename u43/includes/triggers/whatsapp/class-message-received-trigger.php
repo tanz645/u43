@@ -37,6 +37,12 @@ class Message_Received_Trigger extends Trigger_Base {
             'timestamp' => 'integer',
             'media_url' => 'string',
             'media_type' => 'string',
+            'interactive_type' => 'string',
+            'button_id' => 'string',
+            'button_title' => 'string',
+            'list_reply_id' => 'string',
+            'list_reply_title' => 'string',
+            'list_reply_description' => 'string',
         ];
     }
 }

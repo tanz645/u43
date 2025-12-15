@@ -11,9 +11,16 @@ export default function NodeConfigPanel() {
   const [loadingModels, setLoadingModels] = useState(false);
   const promptTextareaRef = useRef(null);
   
-  // Find connected source nodes for condition nodes and agent nodes
+  // Find connected source nodes for condition nodes, agent nodes, and action nodes
   const getConnectedSourceNodes = () => {
-    if (!selectedNode || (selectedNode.data.nodeType !== 'condition' && selectedNode.data.nodeType !== 'agent')) {
+    if (!selectedNode) {
+      return [];
+    }
+    
+    // For action nodes, only show connected nodes when configuring tool inputs that support variables
+    // For condition and agent nodes, always show connected nodes
+    const nodeType = selectedNode.data.nodeType;
+    if (nodeType !== 'condition' && nodeType !== 'agent' && nodeType !== 'action') {
       return [];
     }
     
@@ -24,7 +31,24 @@ export default function NodeConfigPanel() {
     }).filter(Boolean);
   };
   
+  // Find all trigger nodes in the workflow (trigger_data is always available)
+  const getTriggerNodes = () => {
+    if (!selectedNode) {
+      return [];
+    }
+    
+    const nodeType = selectedNode.data.nodeType;
+    // Only show trigger nodes for nodes that can use variables (condition, agent, action)
+    if (nodeType !== 'condition' && nodeType !== 'agent' && nodeType !== 'action') {
+      return [];
+    }
+    
+    // Find all trigger nodes in the workflow
+    return nodes.filter(node => node.data?.nodeType === 'trigger');
+  };
+  
   const connectedSourceNodes = getConnectedSourceNodes();
+  const triggerNodes = getTriggerNodes();
   
   // Fetch OpenAI models
   const fetchOpenAIModels = async (currentConfig = null) => {
@@ -46,17 +70,29 @@ export default function NodeConfigPanel() {
         setOpenaiModels(data.models || []);
         
         // Set default model if not set and models are available
-        const configToCheck = currentConfig || config;
-        if (data.models && data.models.length > 0 && !configToCheck.settings?.model) {
-          const defaultModel = data.default_model || data.models[0].id;
-          setConfig(prevConfig => ({
-            ...prevConfig,
-            settings: {
-              ...prevConfig.settings,
-              model: defaultModel,
-              provider: prevConfig.settings?.provider || 'openai'
+        // Use setConfig callback to read current state instead of closure value
+        // This prevents stale closure issues when async operation completes
+        if (data.models && data.models.length > 0) {
+          setConfig(prevConfig => {
+            // If currentConfig was provided, use it for the check; otherwise use prevConfig
+            const configToCheck = currentConfig || prevConfig;
+            
+            // Only set default if model is not already set
+            if (!configToCheck.settings?.model) {
+              const defaultModel = data.default_model || data.models[0].id;
+              return {
+                ...prevConfig,
+                settings: {
+                  ...prevConfig.settings,
+                  model: defaultModel,
+                  provider: prevConfig.settings?.provider || 'openai'
+                }
+              };
             }
-          }));
+            
+            // Return unchanged config if model is already set
+            return prevConfig;
+          });
         }
       } else {
         console.warn('Failed to fetch OpenAI models:', response.status);
@@ -145,7 +181,8 @@ export default function NodeConfigPanel() {
             'wordpress_spam_comment': 'spam_comment',
             'wordpress_delete_comment': 'delete_comment',
             'wordpress_send_email': 'send_email',
-            'whatsapp_send_message': 'whatsapp_send_message',
+            'whatsapp_send_text_message': 'whatsapp_send_text_message',
+            'whatsapp_send_button_message': 'whatsapp_send_button_message',
           };
           configToSet.actionType = toolIdToActionTypeMap[configToSet.tool_id] || configToSet.tool_id;
         }
@@ -196,6 +233,43 @@ export default function NodeConfigPanel() {
         const prompt = config.prompt || '';
         if (!prompt || prompt.trim() === '') {
           alert('Please enter a prompt for the AI agent. The node cannot be saved without a prompt.');
+          return;
+        }
+      }
+      
+      // Validate action nodes have required fields
+      if (selectedNode?.data?.nodeType === 'action' && toolConfig && toolConfig.inputs) {
+        const missingRequiredFields = [];
+        const inputs = config.inputs || {};
+        
+        Object.entries(toolConfig.inputs).forEach(([inputKey, inputConfig]) => {
+          // Skip hidden fields (message_type, template fields)
+          if (inputKey === 'message_type' || inputKey === 'template_name' || inputKey === 'template_language') {
+            return;
+          }
+          
+          if (inputConfig.required) {
+            const inputValue = inputs[inputKey] ?? inputConfig.default ?? '';
+            
+            // Check if field is empty
+            let isEmpty = false;
+            
+            if (inputConfig.type === 'array') {
+              isEmpty = !Array.isArray(inputValue) || inputValue.length === 0;
+            } else if (typeof inputValue === 'string') {
+              isEmpty = inputValue.trim() === '';
+            } else {
+              isEmpty = !inputValue || inputValue === null || inputValue === undefined;
+            }
+            
+            if (isEmpty) {
+              missingRequiredFields.push(inputConfig.label || inputKey);
+            }
+          }
+        });
+        
+        if (missingRequiredFields.length > 0) {
+          alert(`Please fill in all required fields:\n\n${missingRequiredFields.join('\n')}\n\nThe node cannot be saved without these fields.`);
           return;
         }
       }
@@ -776,29 +850,285 @@ export default function NodeConfigPanel() {
               <div className="mt-4 space-y-4 pt-4 border-t border-gray-200">
                 <h4 className="text-sm font-semibold text-gray-700">Tool Inputs</h4>
                 {(() => {
-                  // Sort inputs: message_type first, then others
-                  const sortedInputs = Object.entries(toolConfig.inputs).sort(([keyA], [keyB]) => {
-                    if (keyA === 'message_type') return -1;
-                    if (keyB === 'message_type') return 1;
-                    return 0;
-                  });
-                  
-                  // Get current message_type value
-                  const messageType = config.inputs?.message_type ?? toolConfig.inputs.message_type?.default ?? 'text';
-                  
-                  return sortedInputs.map(([inputKey, inputConfig]) => {
+                  return Object.entries(toolConfig.inputs).map(([inputKey, inputConfig]) => {
                     const inputValue = config.inputs?.[inputKey] ?? inputConfig.default ?? '';
                     
-                    // Conditionally hide template fields when message_type is 'text'
-                    if (inputKey === 'template_name' || inputKey === 'template_language') {
-                      if (messageType !== 'template') {
-                        return null;
-                      }
+                    // Skip message_type, template_name, and template_language fields
+                    if (inputKey === 'message_type' || inputKey === 'template_name' || inputKey === 'template_language') {
+                      return null;
                     }
                     
-                    // Conditionally hide message field when message_type is 'template'
-                    if (inputKey === 'message' && messageType === 'template') {
-                      return null;
+                    // Special handling for buttons array - show button configuration UI
+                    if (inputKey === 'buttons' && toolConfig.id === 'whatsapp_send_button_message') {
+                      const buttons = Array.isArray(inputValue) ? inputValue : [];
+                      const buttonColors = ['#3B82F6', '#10B981', '#F59E0B']; // Blue, Green, Orange
+                      
+                      return (
+                        <div key={inputKey}>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            {inputConfig.label || inputKey}
+                            {inputConfig.required && <span className="text-red-500 ml-1">*</span>}
+                            <span className="text-xs text-gray-500 ml-2">(Max 3 buttons)</span>
+                          </label>
+                          
+                          <div className="space-y-2 mb-2">
+                            {buttons.map((button, index) => (
+                              <div key={index} className="flex items-center gap-2 p-2 border border-gray-300 rounded-md bg-gray-50">
+                                <div 
+                                  className="w-4 h-4 rounded border-2 border-gray-300"
+                                  style={{ backgroundColor: button.color || buttonColors[index] || '#3B82F6' }}
+                                  title={`Button ${index + 1} color`}
+                                />
+                                <div className="flex-1">
+                                  <input
+                                    type="text"
+                                    value={button.id || ''}
+                                    onChange={(e) => {
+                                      const newButtons = [...buttons];
+                                      newButtons[index] = { ...newButtons[index], id: e.target.value };
+                                      setConfig({
+                                        ...config,
+                                        inputs: {
+                                          ...(config.inputs || {}),
+                                          [inputKey]: newButtons,
+                                        },
+                                      });
+                                    }}
+                                    placeholder="Button ID (e.g., btn1)"
+                                    className="w-full px-2 py-1 text-xs border border-gray-300 rounded mb-1"
+                                  />
+                                  <input
+                                    type="text"
+                                    value={button.title || ''}
+                                    onChange={(e) => {
+                                      const newButtons = [...buttons];
+                                      newButtons[index] = { ...newButtons[index], title: e.target.value };
+                                      setConfig({
+                                        ...config,
+                                        inputs: {
+                                          ...(config.inputs || {}),
+                                          [inputKey]: newButtons,
+                                        },
+                                      });
+                                    }}
+                                    placeholder="Button Title"
+                                    className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
+                                  />
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const newButtons = buttons.filter((_, i) => i !== index);
+                                    setConfig({
+                                      ...config,
+                                      inputs: {
+                                        ...(config.inputs || {}),
+                                        [inputKey]: newButtons,
+                                      },
+                                    });
+                                  }}
+                                  className="text-red-500 hover:text-red-700 text-sm"
+                                  title="Remove button"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                          
+                          {buttons.length < 3 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newButtons = [...buttons, { id: `btn${buttons.length + 1}`, title: '', type: 'reply', color: buttonColors[buttons.length] || '#3B82F6' }];
+                                setConfig({
+                                  ...config,
+                                  inputs: {
+                                    ...(config.inputs || {}),
+                                    [inputKey]: newButtons,
+                                  },
+                                });
+                              }}
+                              className="text-sm text-blue-600 hover:text-blue-800 mb-2"
+                            >
+                              + Add Button
+                            </button>
+                          )}
+                          
+                          {inputConfig.description && (
+                            <p className="text-xs text-gray-500 mt-1">{inputConfig.description}</p>
+                          )}
+                        </div>
+                      );
+                    }
+                    
+                    // Special handling for phone_number_variable - show variable selection UI
+                    if (inputKey === 'phone_number_variable') {
+                      // Combine trigger nodes and connected source nodes
+                      const allSourceNodes = [...triggerNodes, ...connectedSourceNodes.filter(node => 
+                        !triggerNodes.some(trigger => trigger.id === node.id)
+                      )];
+                      
+                      return (
+                        <div key={inputKey}>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            {inputConfig.label || inputKey}
+                            {inputConfig.required && <span className="text-red-500 ml-1">*</span>}
+                          </label>
+                          
+                          {/* Show trigger nodes and connected nodes for variable suggestions */}
+                          {allSourceNodes.length > 0 && (
+                            <div className="mb-3 p-3 bg-green-50 border border-green-200 rounded-md max-w-full overflow-hidden">
+                              <p className="text-xs font-semibold text-green-900 mb-2 flex items-center gap-1">
+                                <span>✓</span> Available Variables - Click to insert:
+                              </p>
+                              <div className="space-y-2 max-h-64 overflow-y-auto overflow-x-hidden pr-1">
+                                {allSourceNodes.map((sourceNode) => {
+                                  const nodeId = sourceNode.id;
+                                  const nodeType = sourceNode.data.nodeType;
+                                  const nodeLabel = sourceNode.data.label || sourceNode.data.config?.title || 'Untitled Node';
+                                  let suggestions = [];
+                                  
+                                  if (nodeType === 'agent') {
+                                    suggestions = [
+                                      { 
+                                        label: 'Decision', 
+                                        description: 'The decision made (yes, no, maybe, etc.)',
+                                        value: `{{${nodeId}.decision}}`,
+                                        displayValue: `{{node.decision}}`
+                                      },
+                                      { 
+                                        label: 'Reasoning', 
+                                        description: 'The explanation for the decision',
+                                        value: `{{${nodeId}.reasoning}}`,
+                                        displayValue: `{{node.reasoning}}`
+                                      },
+                                    ];
+                                  } else if (nodeType === 'trigger') {
+                                    // Get outputs from trigger config
+                                    const triggerId = sourceNode.data.config?.trigger_type || sourceNode.data.triggerType;
+                                    if (triggerId && triggerConfigs[triggerId] && triggerConfigs[triggerId].outputs) {
+                                      suggestions = Object.entries(triggerConfigs[triggerId].outputs).map(([key, output]) => ({
+                                        label: output.label || key,
+                                        description: `Type: ${output.type || 'string'}`,
+                                        value: `{{trigger_data.${key}}}`
+                                      }));
+                                    } else {
+                                      // Fallback for common trigger outputs
+                                      suggestions = [
+                                        { 
+                                          label: 'Comment ID', 
+                                          description: 'The ID of the comment',
+                                          value: `{{trigger_data.comment_id}}` 
+                                        },
+                                        { 
+                                          label: 'Author', 
+                                          description: 'The comment author name',
+                                          value: `{{trigger_data.author}}` 
+                                        },
+                                        { 
+                                          label: 'Content', 
+                                          description: 'The comment text content',
+                                          value: `{{trigger_data.content}}` 
+                                        },
+                                        { 
+                                          label: 'Email', 
+                                          description: 'The comment author email',
+                                          value: `{{trigger_data.email}}` 
+                                        },
+                                      ];
+                                    }
+                                  } else if (nodeType === 'action') {
+                                    // Get outputs from tool config
+                                    const toolId = sourceNode.data.config?.tool_id || sourceNode.data.toolId;
+                                    if (toolId) {
+                                      const normalizedToolId = toolId.replace(/-/g, '_');
+                                      const normalizedToolIdHyphen = toolId.replace(/_/g, '-');
+                                      const toolConfig = toolConfigs[toolId] || toolConfigs[normalizedToolId] || toolConfigs[normalizedToolIdHyphen];
+                                      if (toolConfig && toolConfig.outputs) {
+                                        suggestions = Object.entries(toolConfig.outputs).map(([key, output]) => ({
+                                          label: output.label || key,
+                                          description: `Type: ${output.type || 'string'}`,
+                                          value: `{{${nodeId}.${key}}}`,
+                                          displayValue: `{{node.${key}}}`
+                                        }));
+                      }
+                    }
+                                  } else {
+                                    // For other node types, show generic output
+                                    suggestions = [
+                                      { 
+                                        label: 'Output', 
+                                        description: 'The output from this node',
+                                        value: `{{${nodeId}}}`,
+                                        displayValue: `{{node}}`
+                                      },
+                                    ];
+                                  }
+                                  
+                                  return (
+                                    <div key={nodeId} className="bg-white rounded p-2 border border-green-100 max-w-full overflow-hidden">
+                                      <div className="flex items-center gap-2 mb-1 min-w-0">
+                                        <span className="text-xs font-semibold text-green-900 truncate">{nodeLabel}</span>
+                                        <span className="text-xs text-gray-500 flex-shrink-0">({nodeType})</span>
+                                      </div>
+                                      <div className="space-y-1">
+                                        {suggestions.map((suggestion, idx) => (
+                                          <button
+                                            key={idx}
+                                            type="button"
+                                            onClick={() => setConfig({
+                                              ...config,
+                                              inputs: {
+                                                ...(config.inputs || {}),
+                                                [inputKey]: suggestion.value,
+                                              },
+                                            })}
+                                            className="block w-full text-left p-1.5 rounded hover:bg-blue-50 transition-colors group min-w-0"
+                                            title={suggestion.description}
+                                          >
+                                            <div className="flex items-center gap-2 min-w-0">
+                                              <span className="text-xs font-medium text-blue-700 group-hover:text-blue-900 truncate">
+                                                {suggestion.label}
+                                              </span>
+                                              <span 
+                                                className="text-xs text-gray-500 font-mono truncate"
+                                                title={suggestion.value}
+                                              >
+                                                {suggestion.displayValue || suggestion.value}
+                                              </span>
+                                            </div>
+                                            <div className="text-xs text-gray-500 mt-0.5 truncate">
+                                              {suggestion.description}
+                                            </div>
+                                          </button>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                          
+                          <input
+                            type="text"
+                            value={inputValue}
+                            onChange={(e) => setConfig({
+                              ...config,
+                              inputs: {
+                                ...(config.inputs || {}),
+                                [inputKey]: e.target.value,
+                              },
+                            })}
+                            placeholder="e.g., {{trigger_data.phone}} or {{node_id.phone_number}}"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+                          />
+                          {inputConfig.description && (
+                            <p className="text-xs text-gray-500 mt-1">{inputConfig.description}</p>
+                          )}
+                        </div>
+                      );
                     }
                   
                   // Handle array type inputs (especially phone_numbers)
@@ -903,6 +1233,34 @@ export default function NodeConfigPanel() {
                             <option key={optValue} value={optValue}>{optLabel}</option>
                           ))}
                         </select>
+                        {inputConfig.description && (
+                          <p className="text-xs text-gray-500 mt-1">{inputConfig.description}</p>
+                        )}
+                      </div>
+                    );
+                  }
+                  
+                  // Special handling for message field - make it a larger textarea
+                  if (inputKey === 'message' || inputKey === 'body_text') {
+                    return (
+                      <div key={inputKey}>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          {inputConfig.label || inputKey}
+                          {inputConfig.required && <span className="text-red-500 ml-1">*</span>}
+                        </label>
+                        <textarea
+                          value={inputValue}
+                          onChange={(e) => setConfig({
+                            ...config,
+                            inputs: {
+                              ...(config.inputs || {}),
+                              [inputKey]: e.target.value,
+                            },
+                          })}
+                          placeholder={inputConfig.description || `Enter ${inputKey}`}
+                          rows={6}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
                         {inputConfig.description && (
                           <p className="text-xs text-gray-500 mt-1">{inputConfig.description}</p>
                         )}

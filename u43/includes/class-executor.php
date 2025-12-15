@@ -7,13 +7,22 @@
 
 namespace U43;
 
+use U43\Executor\Handlers\Condition_Handler;
+use U43\Executor\Handlers\WhatsApp\Button_Message_Handler;
+use U43\Executor\Handlers\WhatsApp\Button_Message_Sent_Handler;
+use U43\Executor\Handlers\WhatsApp\Button_Message_Service;
+use U43\Executor\Handlers\WhatsApp\Button_Continuation_Service;
+
 class Executor {
     
     private $tools_registry;
     private $agents_registry;
     private $execution_id;
+    private $workflow_id;
     private $has_failed_nodes = false;
     private $first_error_message = '';
+    private $node_handlers = [];
+    private $is_paused = false;
     
     /**
      * Constructor
@@ -24,6 +33,24 @@ class Executor {
     public function __construct($tools_registry, $agents_registry) {
         $this->tools_registry = $tools_registry;
         $this->agents_registry = $agents_registry;
+        
+        // Register node handlers (order matters - more specific handlers first)
+        $this->node_handlers = [
+            new Condition_Handler(),
+            new Button_Message_Sent_Handler(), // Check for sent button messages first (no button_id)
+            new Button_Message_Handler(), // Then check for button clicks (has button_id)
+        ];
+    }
+    
+    /**
+     * Set execution context (for continuation scenarios)
+     *
+     * @param int $execution_id Execution ID
+     * @param int $workflow_id Workflow ID
+     */
+    public function set_execution_context($execution_id, $workflow_id) {
+        $this->execution_id = $execution_id;
+        $this->workflow_id = $workflow_id;
     }
     
     /**
@@ -43,6 +70,7 @@ class Executor {
         }
         
         $this->execution_id = $execution_id;
+        $this->workflow_id = $workflow->id;
         $start_time = microtime(true);
         
         // Track if any node failed
@@ -68,6 +96,15 @@ class Executor {
             
             // Calculate duration
             $duration_ms = (microtime(true) - $start_time) * 1000;
+            
+            // Check if execution is paused (waiting for button click)
+            if ($this->is_paused) {
+                // Mark execution as running (it will continue when button is clicked)
+                // Don't mark as completed - leave it in running state
+                error_log("U43: Workflow execution paused - waiting for button click. Execution ID: {$execution_id}");
+                // Don't update status - keep it as 'running' so it can continue later
+                return $execution_id;
+            }
             
             // Check if any node failed
             if ($this->has_failed_nodes) {
@@ -336,49 +373,57 @@ class Executor {
             // Log node execution success
             $this->log_node_success($node_id, $output, $node_duration_ms);
             
+            // Store button message mapping if this is a button message node
+            if ($node_type === 'action' && isset($node['config']['tool_id']) && $node['config']['tool_id'] === 'whatsapp_send_button_message') {
+                Button_Message_Service::store_mapping($node_id, $output, $node, $this->workflow_id, $this->execution_id);
+            }
+            
             // Execute connected nodes
             $next_nodes = $graph[$node_id] ?? [];
             
-            // Handle condition node branching
-            if ($node_type === 'condition' && is_array($output) && isset($output['result'])) {
-                $condition_result = $output['result'];
-                
-                // Filter nodes based on condition result and edge sourceHandle
-                foreach ($next_nodes as $edge_data) {
-                    $next_node_id = is_array($edge_data) ? $edge_data['node_id'] : $edge_data;
-                    $source_handle = is_array($edge_data) ? ($edge_data['sourceHandle'] ?? null) : null;
+            // Try to find a handler for this node
+            $handler_found = false;
+            foreach ($this->node_handlers as $handler) {
+                if ($handler->can_handle($node, $output)) {
+                    $handler_found = true;
+                    $result = $handler->handle(
+                        $node,
+                        $output,
+                        $next_nodes,
+                        $all_nodes,
+                        $context,
+                        function($next_node, $node_context) use (&$context, $graph, $all_nodes) {
+                            $this->execute_node($next_node, $node_context, $graph, $all_nodes);
+                        },
+                        function($nodes, $node_id) {
+                            return $this->find_node_by_id($nodes, $node_id);
+                        }
+                    );
                     
-                    // Check if this edge matches the condition result
-                    // sourceHandle "true" means condition passed, "false" means condition failed
-                    $should_execute = false;
-                    if ($condition_result === true && ($source_handle === 'true' || $source_handle === null)) {
-                        // Condition is true, execute "true" branch or edges without handle (backward compatibility)
-                        $should_execute = true;
-                    } elseif ($condition_result === false && $source_handle === 'false') {
-                        // Condition is false, execute "false" branch
-                        $should_execute = true;
-                    } elseif ($source_handle === null) {
-                        // Backward compatibility: if no handle specified, execute all edges
-                        $should_execute = true;
+                    // Update context if handler modified it
+                    if (isset($result['context'])) {
+                        $context = $result['context'];
                     }
                     
-                    if ($should_execute) {
-                        $next_node = $this->find_node_by_id($all_nodes, $next_node_id);
-                        if ($next_node) {
-                            try {
-                                $this->execute_node($next_node, $context, $graph, $all_nodes);
-                            } catch (\Exception $child_exception) {
-                                // Child node failed - mark workflow as failed but continue executing other nodes
-                                $this->has_failed_nodes = true;
-                                if (empty($this->first_error_message)) {
-                                    $this->first_error_message = "Node '{$next_node_id}' failed: " . $child_exception->getMessage();
-                                }
-                                // Don't re-throw - let other nodes execute
-                            }
+                    // Track errors
+                    if (!empty($result['has_errors'])) {
+                        $this->has_failed_nodes = true;
+                        if (empty($this->first_error_message) && !empty($result['error_message'])) {
+                            $this->first_error_message = $result['error_message'];
                         }
                     }
+                    
+                    // Track if execution is paused (waiting for button click)
+                    if (!empty($result['paused'])) {
+                        $this->is_paused = true;
+                    }
+                    
+                    break;
                 }
-            } else {
+            }
+            
+            // If no handler found, use normal execution
+            if (!$handler_found) {
                 // Normal execution - execute all connected nodes
                 foreach ($next_nodes as $edge_data) {
                     $next_node_id = is_array($edge_data) ? $edge_data['node_id'] : $edge_data;
@@ -859,6 +904,62 @@ class Executor {
             $format,
             ['%d']
         );
+    }
+    
+    /**
+     * Continue workflow execution from a button message node when button is clicked
+     * Delegates to WhatsApp Button Continuation Service
+     *
+     * @param string $message_id WhatsApp message ID
+     * @param string $button_id Button ID that was clicked
+     * @param array $button_data Button data (button_id, button_title, interactive_type)
+     * @return int|false Execution ID or false on failure
+     */
+    public function continue_from_button_message($message_id, $button_id, $button_data = []) {
+        return Button_Continuation_Service::continue_with_executor($this, $message_id, $button_id, $button_data);
+    }
+    
+    /**
+     * Continue execution from a specific node (used by continuation services)
+     *
+     * @param array $node Node to execute
+     * @param array $context Execution context
+     * @param array $graph Execution graph
+     * @param array $all_nodes All nodes
+     */
+    public function continue_execution_from_node($node, $context, $graph, $all_nodes) {
+        $this->execute_node($node, $context, $graph, $all_nodes);
+    }
+    
+    /**
+     * Get execution state (for continuation services to check final status)
+     *
+     * @return array Array with 'has_failed_nodes' and 'first_error_message'
+     */
+    public function get_execution_state() {
+        return [
+            'has_failed_nodes' => $this->has_failed_nodes,
+            'first_error_message' => $this->first_error_message,
+        ];
+    }
+    
+    /**
+     * Finalize continuation execution and update status
+     *
+     * @param int $execution_id Execution ID
+     * @param float $start_time Start time (microtime)
+     * @return bool True if successful, false if failed
+     */
+    public function finalize_continuation($execution_id, $start_time) {
+        $duration_ms = (microtime(true) - $start_time) * 1000;
+        
+        if ($this->has_failed_nodes) {
+            $this->update_execution_status($execution_id, 'failed', $this->first_error_message, $duration_ms);
+            return false;
+        }
+        
+        $this->update_execution_status($execution_id, 'success', '', $duration_ms);
+        return true;
     }
 }
 

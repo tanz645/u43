@@ -26,6 +26,7 @@ class Data_Cleanup {
                 $wpdb->prefix . 'u43_executions',
                 $wpdb->prefix . 'u43_node_logs',
                 $wpdb->prefix . 'u43_credentials',
+                $wpdb->prefix . 'u43_button_message_mappings',
             ];
             
             foreach ($tables as $table) {

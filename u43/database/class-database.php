@@ -81,6 +81,23 @@ class Database {
         
         dbDelta($sql);
         
+        // Button message mappings table (for routing button clicks to workflows)
+        $button_mappings_table = $wpdb->prefix . 'u43_button_message_mappings';
+        $sql = "CREATE TABLE $button_mappings_table (
+            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            message_id VARCHAR(255) NOT NULL,
+            workflow_id BIGINT UNSIGNED NOT NULL,
+            execution_id BIGINT UNSIGNED NOT NULL,
+            node_id VARCHAR(100) NOT NULL,
+            button_ids TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_message_id (message_id),
+            INDEX idx_workflow_id (workflow_id),
+            INDEX idx_execution_id (execution_id)
+        ) $charset_collate;";
+        
+        dbDelta($sql);
+        
         // Credentials table
         $credentials_table = $wpdb->prefix . 'u43_credentials';
         $sql = "CREATE TABLE $credentials_table (

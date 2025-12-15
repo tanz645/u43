@@ -1,0 +1,80 @@
+{
+  "id": "whatsapp_send_button_message",
+  "name": "Send WhatsApp Button Message",
+  "description": "Sends an interactive button message via WhatsApp Cloud API",
+  "version": "1.0.0",
+  "category": "whatsapp",
+  "icon": "whatsapp",
+  "integration": "whatsapp",
+  "inputs": {
+    "phone_number_variable": {
+      "type": "string",
+      "required": false,
+      "label": "Phone Number",
+      "description": "Select a variable from previous node containing phone number(s). Use format {{node_id.field}} or {{trigger_data.field}}. Can be a single number or array of numbers."
+    },
+    "phone_numbers": {
+      "type": "array",
+      "required": false,
+      "label": "Phone Numbers (Alternative)",
+      "description": "Array of phone numbers to send to (with country code, e.g., ['8801345318757', '+1234567890']). This takes precedence over the variable input.",
+      "default": []
+    },
+    "header_text": {
+      "type": "string",
+      "required": false,
+      "label": "Header Text",
+      "description": "Optional header text for the message"
+    },
+    "body_text": {
+      "type": "string",
+      "required": true,
+      "label": "Body Text",
+      "description": "Main message body text (required)"
+    },
+    "footer_text": {
+      "type": "string",
+      "required": false,
+      "label": "Footer Text",
+      "description": "Optional footer text for the message"
+    },
+    "buttons": {
+      "type": "array",
+      "required": true,
+      "label": "Buttons",
+      "description": "Array of button objects. Each button should have: id, title, type (reply). Maximum 3 buttons.",
+      "default": []
+    }
+  },
+  "outputs": {
+    "message_id": {
+      "type": "string",
+      "label": "Message ID"
+    },
+    "status": {
+      "type": "string",
+      "label": "Status"
+    },
+    "sent_at": {
+      "type": "integer",
+      "label": "Sent At"
+    },
+    "sent_to": {
+      "type": "array",
+      "label": "Sent To"
+    },
+    "interactive_type": {
+      "type": "string",
+      "label": "Interactive Type"
+    },
+    "button_id": {
+      "type": "string",
+      "label": "Button ID"
+    },
+    "button_title": {
+      "type": "string",
+      "label": "Button Title"
+    }
+  },
+  "handler": "U43\\Tools\\WhatsApp\\Send_Button_Message"
+}

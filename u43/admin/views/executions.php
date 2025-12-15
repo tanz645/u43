@@ -99,7 +99,25 @@ $workflows = $flow_manager->get_workflows(['limit' => 100]);
             <?php if (!empty($execution->trigger_data)): ?>
             <div class="u43-trigger-data" style="margin-top: 20px;">
                 <h3><?php esc_html_e('Trigger Data', 'u43'); ?></h3>
-                <pre style="background: #f5f5f5; padding: 15px; overflow-x: auto; max-height: 300px;"><?php echo esc_html(json_encode($execution->trigger_data, JSON_PRETTY_PRINT)); ?></pre>
+                
+                <?php 
+                $trigger_data = $execution->trigger_data;
+                $webhook_body = $trigger_data['_webhook_body'] ?? null;
+                // Remove webhook body from trigger data display (show separately)
+                $display_data = $trigger_data;
+                unset($display_data['_webhook_body']);
+                ?>
+                
+                <?php if (!empty($webhook_body)): ?>
+                <div style="margin-bottom: 20px;">
+                    <h4 style="margin-bottom: 10px; color: #0073aa;"><?php esc_html_e('Webhook Request Body', 'u43'); ?></h4>
+                    <pre style="background: #e8f4f8; padding: 15px; overflow-x: auto; max-height: 400px; border-left: 4px solid #0073aa;"><?php echo esc_html(json_encode($webhook_body, JSON_PRETTY_PRINT)); ?></pre>
+                    <p style="margin-top: 5px; font-size: 12px; color: #666;"><?php esc_html_e('Full webhook payload received from WhatsApp', 'u43'); ?></p>
+                </div>
+                <?php endif; ?>
+                
+                <h4 style="margin-bottom: 10px;"><?php esc_html_e('Processed Trigger Data', 'u43'); ?></h4>
+                <pre style="background: #f5f5f5; padding: 15px; overflow-x: auto; max-height: 300px;"><?php echo esc_html(json_encode($display_data, JSON_PRETTY_PRINT)); ?></pre>
             </div>
             <?php endif; ?>
             

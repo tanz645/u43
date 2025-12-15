@@ -1,0 +1,87 @@
+{
+  "id": "http_post",
+  "name": "HTTP POST Request",
+  "description": "Make an HTTP POST request to any URL with JSON body, custom headers, query parameters, and URL parameters",
+  "version": "1.0.0",
+  "category": "http",
+  "icon": "http",
+  "integration": "http",
+  "inputs": {
+    "url": {
+      "type": "string",
+      "required": true,
+      "label": "URL",
+      "description": "The full URL to make the POST request to. Supports variables like {{trigger_data.url}} or {{node_id.field}}. URL parameters can be set separately below."
+    },
+    "url_params": {
+      "type": "object",
+      "required": false,
+      "label": "URL Parameters",
+      "description": "URL path parameters (e.g., /users/{id} -> id: 123). Use variables like {{trigger_data.user_id}}",
+      "default": {}
+    },
+    "query_params": {
+      "type": "object",
+      "required": false,
+      "label": "Query Parameters",
+      "description": "Query string parameters (e.g., ?page=1&limit=10). Use variables like {{trigger_data.page}}",
+      "default": {}
+    },
+    "headers": {
+      "type": "object",
+      "required": false,
+      "label": "Headers",
+      "description": "HTTP headers as key-value pairs. Use variables like {{trigger_data.api_key}}. Content-Type: application/json is added automatically if not specified.",
+      "default": {}
+    },
+    "body": {
+      "type": "object",
+      "required": false,
+      "label": "Request Body (JSON)",
+      "description": "JSON request body. Use variables like {{trigger_data.content}} or {{node_id.field}}. Can be a JSON object or JSON string.",
+      "default": {}
+    },
+    "output_format": {
+      "type": "string",
+      "required": false,
+      "label": "Output Format",
+      "description": "How to format the response output. 'json' will parse and return structured data, 'void' will return no output.",
+      "options": {
+        "json": "JSON (with types)",
+        "void": "Void (no output)"
+      },
+      "default": "json"
+    },
+    "output_schema": {
+      "type": "object",
+      "required": false,
+      "label": "Output Schema (Optional)",
+      "description": "Define the expected JSON response structure with types. Only used when output_format is 'json'. Example: {\"status\": \"string\", \"data\": {\"id\": \"number\", \"name\": \"string\"}}",
+      "default": {}
+    }
+  },
+  "outputs": {
+    "status_code": {
+      "type": "integer",
+      "label": "HTTP Status Code"
+    },
+    "headers": {
+      "type": "object",
+      "label": "Response Headers"
+    },
+    "body": {
+      "type": "object",
+      "label": "Response Body"
+    },
+    "raw_response": {
+      "type": "string",
+      "label": "Raw Response"
+    },
+    "success": {
+      "type": "boolean",
+      "label": "Success"
+    }
+  },
+  "handler": "U43\\Tools\\HTTP\\HTTP_Post"
+}
+

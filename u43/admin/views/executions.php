@@ -191,6 +191,68 @@ $workflows = $flow_manager->get_workflows(['limit' => 100]);
                             $output_data = [];
                         }
                         
+                        // Show HTTP request details prominently for HTTP action nodes
+                        if ($log->node_type === 'action' && !empty($output_data['request'])): 
+                            $request = $output_data['request'];
+                            if (!is_array($request)) {
+                                $request = [];
+                            }
+                        ?>
+                            <div style="margin-bottom: 20px; padding: 15px; background: #fff3cd; border-left: 4px solid #ffc107;">
+                                <strong style="font-size: 14px;"><?php esc_html_e('HTTP Request:', 'u43'); ?></strong>
+                                <div style="margin-top: 10px;">
+                                    <div style="margin-bottom: 8px;">
+                                        <strong><?php esc_html_e('Method:', 'u43'); ?></strong> 
+                                        <code style="background: #f0f0f0; padding: 2px 6px; border-radius: 3px;"><?php echo esc_html($request['method'] ?? 'GET'); ?></code>
+                                    </div>
+                                    <div style="margin-bottom: 8px;">
+                                        <strong><?php esc_html_e('URL:', 'u43'); ?></strong>
+                                        <div style="margin-top: 4px; padding: 8px; background: white; border: 1px solid #ddd; font-family: monospace; font-size: 12px; word-break: break-all;">
+                                            <?php echo esc_html($request['url'] ?? ''); ?>
+                                        </div>
+                                    </div>
+                                    <?php if (!empty($request['headers'])): ?>
+                                    <div style="margin-bottom: 8px;">
+                                        <strong><?php esc_html_e('Headers:', 'u43'); ?></strong>
+                                        <pre style="margin-top: 4px; padding: 8px; background: white; border: 1px solid #ddd; font-size: 11px; max-height: 200px; overflow-y: auto;"><?php echo esc_html(json_encode($request['headers'], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)); ?></pre>
+                                    </div>
+                                    <?php endif; ?>
+                                    <?php if (!empty($request['query_params'])): ?>
+                                    <div style="margin-bottom: 8px;">
+                                        <strong><?php esc_html_e('Query Parameters:', 'u43'); ?></strong>
+                                        <pre style="margin-top: 4px; padding: 8px; background: white; border: 1px solid #ddd; font-size: 11px; max-height: 150px; overflow-y: auto;"><?php echo esc_html(json_encode($request['query_params'], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)); ?></pre>
+                                    </div>
+                                    <?php endif; ?>
+                                    <?php if (!empty($request['url_params'])): ?>
+                                    <div style="margin-bottom: 8px;">
+                                        <strong><?php esc_html_e('URL Parameters:', 'u43'); ?></strong>
+                                        <pre style="margin-top: 4px; padding: 8px; background: white; border: 1px solid #ddd; font-size: 11px; max-height: 150px; overflow-y: auto;"><?php echo esc_html(json_encode($request['url_params'], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)); ?></pre>
+                                    </div>
+                                    <?php endif; ?>
+                                    <?php if (isset($request['body']) && $request['body'] !== null && $request['body'] !== ''): ?>
+                                    <div style="margin-bottom: 8px;">
+                                        <strong><?php esc_html_e('Request Body:', 'u43'); ?></strong>
+                                        <pre style="margin-top: 4px; padding: 8px; background: white; border: 1px solid #ddd; font-size: 11px; max-height: 300px; overflow-y: auto; white-space: pre-wrap; word-wrap: break-word;"><?php 
+                                            $body = $request['body'];
+                                            // Try to pretty-print JSON if it's JSON
+                                            if (is_string($body)) {
+                                                $decoded = json_decode($body, true);
+                                                if (json_last_error() === JSON_ERROR_NONE) {
+                                                    echo esc_html(json_encode($decoded, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+                                                } else {
+                                                    echo esc_html($body);
+                                                }
+                                            } else {
+                                                echo esc_html(json_encode($body, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+                                            }
+                                        ?></pre>
+                                    </div>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                        <?php endif; ?>
+                        
+                        <?php
                         // Show inputs sent to agent nodes prominently
                         if ($log->node_type === 'agent' && !empty($output_data['_inputs_sent'])): 
                             $inputs_sent = $output_data['_inputs_sent'];

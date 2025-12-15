@@ -10,6 +10,9 @@ export default function NodeConfigPanel() {
   const [openaiModels, setOpenaiModels] = useState([]);
   const [loadingModels, setLoadingModels] = useState(false);
   const promptTextareaRef = useRef(null);
+  // Track last focused input for variable insertion in HTTP tools
+  const lastFocusedInputRef = useRef(null);
+  const lastFocusedInputInfoRef = useRef({ index: null, isKey: false, inputKey: null });
   
   // Find connected source nodes for condition nodes, agent nodes, and action nodes
   const getConnectedSourceNodes = () => {
@@ -1208,13 +1211,40 @@ export default function NodeConfigPanel() {
                                           <button
                                             key={idx}
                                             type="button"
-                                            onClick={() => setConfig({
-                                              ...config,
-                                              inputs: {
-                                                ...(config.inputs || {}),
-                                                [inputKey]: suggestion.value,
-                                              },
-                                            })}
+                                            onClick={() => {
+                                              // Find the input field for this inputKey
+                                              const inputField = document.querySelector(`input[data-input-key="${inputKey}"]`);
+                                              if (inputField) {
+                                                const start = inputField.selectionStart || 0;
+                                                const end = inputField.selectionEnd || 0;
+                                                const currentValue = inputField.value || '';
+                                                const newValue = currentValue.slice(0, start) + suggestion.value + currentValue.slice(end);
+                                                
+                                                setConfig({
+                                                  ...config,
+                                                  inputs: {
+                                                    ...(config.inputs || {}),
+                                                    [inputKey]: newValue,
+                                                  },
+                                                });
+                                                
+                                                // Set cursor position after inserted text
+                                                setTimeout(() => {
+                                                  inputField.focus();
+                                                  const newPos = start + suggestion.value.length;
+                                                  inputField.setSelectionRange(newPos, newPos);
+                                                }, 0);
+                                              } else {
+                                                // Fallback: just set the value
+                                                setConfig({
+                                                  ...config,
+                                                  inputs: {
+                                                    ...(config.inputs || {}),
+                                                    [inputKey]: suggestion.value,
+                                                  },
+                                                });
+                                              }
+                                            }}
                                             className="block w-full text-left p-1.5 rounded hover:bg-blue-50 transition-colors group min-w-0"
                                             title={suggestion.description}
                                           >
@@ -1244,6 +1274,7 @@ export default function NodeConfigPanel() {
                           
                           <input
                             type="text"
+                            data-input-key={inputKey}
                             value={inputValue}
                             onChange={(e) => setConfig({
                               ...config,
@@ -1391,6 +1422,409 @@ export default function NodeConfigPanel() {
                           placeholder={inputConfig.description || `Enter ${inputKey}`}
                           rows={6}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                        {inputConfig.description && (
+                          <p className="text-xs text-gray-500 mt-1">{inputConfig.description}</p>
+                        )}
+                      </div>
+                    );
+                  }
+                  
+                  // Handle object type inputs (for HTTP tools: url_params, query_params, headers, body, output_schema)
+                  if (inputConfig.type === 'object') {
+                    // Special handling for HTTP tool key-value pairs (url_params, query_params, headers, body)
+                    if (inputKey === 'url_params' || inputKey === 'query_params' || inputKey === 'headers' || inputKey === 'body') {
+                      const objectValue = typeof inputValue === 'object' && inputValue !== null ? inputValue : {};
+                      // Convert object to array of {key, value, id} pairs
+                      // Use a stable ID system: check if there's a __pairs_meta__ object that stores IDs
+                      const pairsMeta = objectValue.__pairs_meta__ || {};
+                      const keyValuePairs = [];
+                      
+                      Object.entries(objectValue).forEach(([key, value]) => {
+                        // Skip the meta object
+                        if (key === '__pairs_meta__') return;
+                        
+                        // Get or create stable ID for this pair
+                        let pairId = pairsMeta[key];
+                        if (!pairId) {
+                          // Generate a new stable ID for this key
+                          pairId = `pair_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+                        }
+                        
+                        keyValuePairs.push({
+                          id: pairId,
+                          key: key.startsWith('__empty_') ? '' : key,
+                          value: typeof value === 'string' ? value : JSON.stringify(value),
+                          originalKey: key // Store original key to track it
+                        });
+                      });
+                      
+                      // Combine trigger nodes and connected source nodes for variable suggestions
+                      const allSourceNodes = [...triggerNodes, ...connectedSourceNodes.filter(node => 
+                        !triggerNodes.some(trigger => trigger.id === node.id)
+                      )];
+                      
+                      return (
+                        <div key={inputKey}>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            {inputConfig.label || inputKey}
+                            {inputConfig.required && <span className="text-red-500 ml-1">*</span>}
+                          </label>
+                          
+                          {/* Show variable suggestions */}
+                          {allSourceNodes.length > 0 && (
+                            <div className="mb-3 p-3 bg-green-50 border border-green-200 rounded-md max-w-full overflow-hidden">
+                              <p className="text-xs font-semibold text-green-900 mb-2 flex items-center gap-1">
+                                <span>✓</span> Available Variables - Click to insert:
+                              </p>
+                              <div className="space-y-2 max-h-64 overflow-y-auto overflow-x-hidden pr-1">
+                                {allSourceNodes.map((sourceNode) => {
+                                  const nodeId = sourceNode.id;
+                                  const nodeType = sourceNode.data.nodeType;
+                                  const nodeLabel = sourceNode.data.label || sourceNode.data.config?.title || 'Untitled Node';
+                                  
+                                  let suggestions = [];
+                                  if (nodeType === 'trigger') {
+                                    const triggerId = sourceNode.data.config?.trigger_type || sourceNode.data.triggerType;
+                                    if (triggerId && triggerConfigs[triggerId] && triggerConfigs[triggerId].outputs) {
+                                      suggestions = Object.entries(triggerConfigs[triggerId].outputs).map(([key, output]) => ({
+                                        label: output.label || key,
+                                        value: `{{trigger_data.${key}}}`
+                                      }));
+                                    }
+                                  } else if (nodeType === 'action') {
+                                    const toolId = sourceNode.data.config?.tool_id || sourceNode.data.toolId;
+                                    if (toolId) {
+                                      const normalizedToolId = toolId.replace(/-/g, '_');
+                                      const normalizedToolIdHyphen = toolId.replace(/_/g, '-');
+                                      const toolConfig = toolConfigs[toolId] || toolConfigs[normalizedToolId] || toolConfigs[normalizedToolIdHyphen];
+                                      if (toolConfig && toolConfig.outputs) {
+                                        suggestions = Object.entries(toolConfig.outputs).map(([key, output]) => ({
+                                          label: output.label || key,
+                                          value: `{{${nodeId}.${key}}}`
+                                        }));
+                                      }
+                                    }
+                                  } else if (nodeType === 'agent') {
+                                    suggestions = [
+                                      { label: 'Decision', value: `{{${nodeId}.decision}}` },
+                                      { label: 'Reasoning', value: `{{${nodeId}.reasoning}}` },
+                                    ];
+                                  }
+                                  
+                                  if (suggestions.length === 0) return null;
+                                  
+                                  return (
+                                    <div key={nodeId} className="bg-white rounded p-2 border border-green-100 text-xs">
+                                      <div className="font-semibold text-green-900 truncate">{nodeLabel}</div>
+                                      <div className="text-gray-600 mt-1 space-y-0.5">
+                                        {suggestions.map((s, idx) => (
+                                          <button
+                                            key={idx}
+                                            type="button"
+                                            onMouseDown={(e) => {
+                                              // Prevent button from taking focus
+                                              e.preventDefault();
+                                            }}
+                                            onClick={() => {
+                                              // Use the stored last focused input info
+                                              const targetInput = lastFocusedInputRef.current;
+                                              const inputInfo = lastFocusedInputInfoRef.current;
+                                              
+                                              // Only proceed if this input key matches
+                                              if (targetInput && inputInfo.index !== null && inputInfo.inputKey === inputKey) {
+                                                const start = targetInput.selectionStart || 0;
+                                                const end = targetInput.selectionEnd || 0;
+                                                const currentValue = targetInput.value || '';
+                                                const newValue = currentValue.slice(0, start) + s.value + currentValue.slice(end);
+                                                
+                                                const newPairs = [...keyValuePairs];
+                                                const oldPair = newPairs[inputInfo.index];
+                                                
+                                                if (inputInfo.isKey) {
+                                                  newPairs[inputInfo.index] = { ...oldPair, key: newValue };
+                                                } else {
+                                                  newPairs[inputInfo.index] = { ...oldPair, value: newValue };
+                                                }
+                                                
+                                                // Convert back to object with stable IDs
+                                                const newObject = {};
+                                                const pairsMeta = {};
+                                                
+                                                newPairs.forEach((p) => {
+                                                  if (p.key && p.key.trim() !== '') {
+                                                    newObject[p.key] = p.value || '';
+                                                    pairsMeta[p.key] = p.id;
+                                                  } else {
+                                                    const tempKey = `__empty_${p.id}`;
+                                                    newObject[tempKey] = p.value || '';
+                                                    pairsMeta[tempKey] = p.id;
+                                                  }
+                                                });
+                                                
+                                                newObject.__pairs_meta__ = pairsMeta;
+                                                
+                                                setConfig({
+                                                  ...config,
+                                                  inputs: {
+                                                    ...(config.inputs || {}),
+                                                    [inputKey]: newObject,
+                                                  },
+                                                });
+                                                
+                                                // Set cursor position after inserted text
+                                                setTimeout(() => {
+                                                  if (targetInput) {
+                                                    targetInput.focus();
+                                                    const newPos = start + s.value.length;
+                                                    targetInput.setSelectionRange(newPos, newPos);
+                                                  }
+                                                }, 0);
+                                              }
+                                            }}
+                                            className="block w-full text-left p-1.5 rounded hover:bg-blue-50 transition-colors group cursor-pointer"
+                                            title={`Click to insert ${s.value} at cursor position`}
+                                          >
+                                            <span className="font-mono text-xs text-blue-700 group-hover:text-blue-900">{s.value}</span>
+                                            <span className="text-xs text-gray-500 ml-2">{s.label}</span>
+                                          </button>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Key-Value pairs list */}
+                          <div className="space-y-2 mb-2">
+                            {keyValuePairs.map((pair, index) => (
+                              <div key={pair.id || index} className="flex items-start gap-2 p-2 border border-gray-300 rounded-md bg-gray-50">
+                                <div className="flex-1 grid grid-cols-2 gap-2">
+                                  <input
+                                    type="text"
+                                    data-input-key={`${inputKey}_key_${index}`}
+                                    onFocus={(e) => {
+                                      lastFocusedInputRef.current = e.target;
+                                      lastFocusedInputInfoRef.current = { index: index, isKey: true, inputKey: inputKey };
+                                    }}
+                                    value={pair.key || ''}
+                                    onChange={(e) => {
+                                      const newPairs = [...keyValuePairs];
+                                      const oldPair = newPairs[index];
+                                      const newKey = e.target.value;
+                                      newPairs[index] = { ...oldPair, key: newKey };
+                                      
+                                      // Convert back to object with stable IDs
+                                      const newObject = {};
+                                      const pairsMeta = {};
+                                      
+                                      newPairs.forEach((p) => {
+                                        if (p.key && p.key.trim() !== '') {
+                                          // Real key-value pair - use key as the object key
+                                          newObject[p.key] = p.value || '';
+                                          // Store the stable ID mapping
+                                          pairsMeta[p.key] = p.id;
+                                        } else {
+                                          // Empty pair - use temporary key but preserve ID
+                                          const tempKey = `__empty_${p.id}`;
+                                          newObject[tempKey] = p.value || '';
+                                          pairsMeta[tempKey] = p.id;
+                                        }
+                                      });
+                                      
+                                      // Store the meta information
+                                      newObject.__pairs_meta__ = pairsMeta;
+                                      
+                                      setConfig({
+                                        ...config,
+                                        inputs: {
+                                          ...(config.inputs || {}),
+                                          [inputKey]: newObject,
+                                        },
+                                      });
+                                    }}
+                                    placeholder="Key"
+                                    className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                  />
+                                  <input
+                                    type="text"
+                                    data-input-key={`${inputKey}_value_${index}`}
+                                    onFocus={(e) => {
+                                      lastFocusedInputRef.current = e.target;
+                                      lastFocusedInputInfoRef.current = { index: index, isKey: false, inputKey: inputKey };
+                                    }}
+                                    value={pair.value || ''}
+                                    onChange={(e) => {
+                                      const newPairs = [...keyValuePairs];
+                                      const oldPair = newPairs[index];
+                                      newPairs[index] = { ...oldPair, value: e.target.value };
+                                      
+                                      // Convert back to object with stable IDs
+                                      const newObject = {};
+                                      const pairsMeta = {};
+                                      
+                                      newPairs.forEach((p) => {
+                                        if (p.key && p.key.trim() !== '') {
+                                          // Real key-value pair - use key as the object key
+                                          newObject[p.key] = p.value || '';
+                                          // Store the stable ID mapping
+                                          pairsMeta[p.key] = p.id;
+                                        } else {
+                                          // Empty pair - use temporary key but preserve ID
+                                          const tempKey = `__empty_${p.id}`;
+                                          newObject[tempKey] = p.value || '';
+                                          pairsMeta[tempKey] = p.id;
+                                        }
+                                      });
+                                      
+                                      // Store the meta information
+                                      newObject.__pairs_meta__ = pairsMeta;
+                                      
+                                      setConfig({
+                                        ...config,
+                                        inputs: {
+                                          ...(config.inputs || {}),
+                                          [inputKey]: newObject,
+                                        },
+                                      });
+                                    }}
+                                    placeholder="Value (use {{variables}})"
+                                    className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
+                                  />
+                                </div>
+                                <button
+                                  type="button"
+                                    onClick={() => {
+                                      const newPairs = keyValuePairs.filter((_, i) => i !== index);
+                                      
+                                      // Convert back to object with stable IDs
+                                      const newObject = {};
+                                      const pairsMeta = {};
+                                      
+                                      newPairs.forEach((p) => {
+                                        if (p.key && p.key.trim() !== '') {
+                                          // Real key-value pair
+                                          newObject[p.key] = p.value || '';
+                                          pairsMeta[p.key] = p.id;
+                                        } else {
+                                          // Empty pair - preserve with its ID
+                                          const tempKey = `__empty_${p.id}`;
+                                          newObject[tempKey] = p.value || '';
+                                          pairsMeta[tempKey] = p.id;
+                                        }
+                                      });
+                                      
+                                      // Store the meta information
+                                      newObject.__pairs_meta__ = pairsMeta;
+                                      
+                                      setConfig({
+                                        ...config,
+                                        inputs: {
+                                          ...(config.inputs || {}),
+                                          [inputKey]: newObject,
+                                        },
+                                      });
+                                    }}
+                                  className="text-red-500 hover:text-red-700 text-sm flex-shrink-0 mt-1"
+                                  title="Remove item"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                          
+                          {/* Add button */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              // Add new empty pair to the list with unique stable ID
+                              const newId = `pair_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+                              const newPairs = [...keyValuePairs, { id: newId, key: '', value: '', originalKey: '' }];
+                              
+                              // Convert back to object with stable IDs
+                              const newObject = {};
+                              const pairsMeta = {};
+                              
+                              newPairs.forEach((p) => {
+                                if (p.key && p.key.trim() !== '') {
+                                  // Real key-value pair
+                                  newObject[p.key] = p.value || '';
+                                  pairsMeta[p.key] = p.id;
+                                } else {
+                                  // Empty pair - use temporary key but preserve stable ID
+                                  const tempKey = `__empty_${p.id}`;
+                                  newObject[tempKey] = p.value || '';
+                                  pairsMeta[tempKey] = p.id;
+                                }
+                              });
+                              
+                              // Store the meta information
+                              newObject.__pairs_meta__ = pairsMeta;
+                              
+                              setConfig({
+                                ...config,
+                                inputs: {
+                                  ...(config.inputs || {}),
+                                  [inputKey]: newObject,
+                                },
+                              });
+                            }}
+                            className="text-sm text-blue-600 hover:text-blue-800 mb-2 flex items-center gap-1"
+                          >
+                            <span>+</span> Add {inputKey === 'url_params' ? 'URL Parameter' : inputKey === 'query_params' ? 'Query Parameter' : inputKey === 'headers' ? 'Header' : 'Field'}
+                          </button>
+                          
+                          {inputConfig.description && (
+                            <p className="text-xs text-gray-500 mt-1">{inputConfig.description}</p>
+                          )}
+                          {inputKey === 'body' && (
+                            <p className="text-xs text-blue-600 mt-1">
+                              💡 Tip: Use variables in values like {'{{trigger_data.name}}'}
+                            </p>
+                          )}
+                        </div>
+                      );
+                    }
+                    
+                    // For output_schema, keep JSON textarea
+                    const objectValue = typeof inputValue === 'object' && inputValue !== null ? inputValue : {};
+                    const objectString = JSON.stringify(objectValue, null, 2);
+                    
+                    return (
+                      <div key={inputKey}>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          {inputConfig.label || inputKey}
+                          {inputConfig.required && <span className="text-red-500 ml-1">*</span>}
+                        </label>
+                        <textarea
+                          value={objectString}
+                          onChange={(e) => {
+                            try {
+                              const parsed = JSON.parse(e.target.value);
+                              setConfig({
+                                ...config,
+                                inputs: {
+                                  ...(config.inputs || {}),
+                                  [inputKey]: parsed,
+                                },
+                              });
+                            } catch {
+                              // Invalid JSON, store as string temporarily
+                              setConfig({
+                                ...config,
+                                inputs: {
+                                  ...(config.inputs || {}),
+                                  [inputKey]: e.target.value,
+                                },
+                              });
+                            }
+                          }}
+                          placeholder={inputKey === 'output_schema' ? '{"status": "string", "data": {"id": "number"}}' : '{"key": "value"}'}
+                          rows={inputKey === 'output_schema' ? 8 : 4}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-xs"
                         />
                         {inputConfig.description && (
                           <p className="text-xs text-gray-500 mt-1">{inputConfig.description}</p>

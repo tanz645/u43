@@ -19,8 +19,8 @@ class Triggers_Registry extends Registry_Base {
         // Get flow manager instance (lazy loading to avoid circular dependency)
         $flow_manager = U43()->get_flow_manager();
         
-        // Get all published workflows that listen to this trigger
-        $workflows = $flow_manager->get_workflows_by_trigger($trigger_id);
+        // Get all published workflows that listen to this trigger (with filtering)
+        $workflows = $flow_manager->get_workflows_by_trigger($trigger_id, $data);
         
         error_log("U43: Trigger '{$trigger_id}' fired. Found " . count($workflows) . " matching workflow(s).");
         

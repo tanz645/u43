@@ -71,6 +71,12 @@
       "label": "List Reply Description"
     }
   },
+  "filter": {
+    "enabled": false,
+    "field": "message_text",
+    "match_type": "exact",
+    "value": ""
+  },
   "handler": "U43\\Triggers\\WhatsApp\\Message_Received_Trigger"
 }
 

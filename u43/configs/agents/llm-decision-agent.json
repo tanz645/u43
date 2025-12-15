@@ -32,7 +32,7 @@
   "handler": "U43\\Agents\\Built_In\\LLM_Decision_Agent\\LLM_Decision_Agent",
   "settings": {
     "provider": "openai",
-    "model": "gpt-3.5-turbo",
+    "model": "gpt-5",
     "temperature": 0.7
   }
 }

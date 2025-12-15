@@ -80,7 +80,8 @@ class Button_Continuation_Service {
         $node_logs = $flow_manager->get_node_logs($mapping->execution_id);
         foreach ($node_logs as $log) {
             if ($log->output_data) {
-                $output = json_decode($log->output_data, true);
+                // get_node_logs() already decodes JSON, so output_data is already an array
+                $output = is_array($log->output_data) ? $log->output_data : json_decode($log->output_data, true);
                 if ($output) {
                     $context[$log->node_id] = $output;
                 }
@@ -221,6 +222,50 @@ class Button_Continuation_Service {
             ]);
             return false;
         }
+    }
+    
+    /**
+     * Build execution graph from nodes and edges
+     *
+     * @param array $nodes Nodes
+     * @param array $edges Edges
+     * @return array Graph structure
+     */
+    private static function build_graph($nodes, $edges) {
+        $graph = [];
+        foreach ($edges as $edge) {
+            $from = $edge['from'] ?? $edge['source'] ?? null;
+            $to = $edge['to'] ?? $edge['target'] ?? null;
+            $sourceHandle = $edge['sourceHandle'] ?? null;
+            
+            if ($from && $to) {
+                if (!isset($graph[$from])) {
+                    $graph[$from] = [];
+                }
+                // Store edge data including sourceHandle for condition node routing
+                $graph[$from][] = [
+                    'node_id' => $to,
+                    'sourceHandle' => $sourceHandle,
+                ];
+            }
+        }
+        return $graph;
+    }
+    
+    /**
+     * Find node by ID
+     *
+     * @param array $nodes Nodes
+     * @param string $node_id Node ID
+     * @return array|null
+     */
+    private static function find_node_by_id($nodes, $node_id) {
+        foreach ($nodes as $node) {
+            if ($node['id'] === $node_id) {
+                return $node;
+            }
+        }
+        return null;
     }
 }
 

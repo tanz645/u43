@@ -70,17 +70,29 @@ export default function NodeConfigPanel() {
         setOpenaiModels(data.models || []);
         
         // Set default model if not set and models are available
-        const configToCheck = currentConfig || config;
-        if (data.models && data.models.length > 0 && !configToCheck.settings?.model) {
-          const defaultModel = data.default_model || data.models[0].id;
-          setConfig(prevConfig => ({
-            ...prevConfig,
-            settings: {
-              ...prevConfig.settings,
-              model: defaultModel,
-              provider: prevConfig.settings?.provider || 'openai'
+        // Use setConfig callback to read current state instead of closure value
+        // This prevents stale closure issues when async operation completes
+        if (data.models && data.models.length > 0) {
+          setConfig(prevConfig => {
+            // If currentConfig was provided, use it for the check; otherwise use prevConfig
+            const configToCheck = currentConfig || prevConfig;
+            
+            // Only set default if model is not already set
+            if (!configToCheck.settings?.model) {
+              const defaultModel = data.default_model || data.models[0].id;
+              return {
+                ...prevConfig,
+                settings: {
+                  ...prevConfig.settings,
+                  model: defaultModel,
+                  provider: prevConfig.settings?.provider || 'openai'
+                }
+              };
             }
-          }));
+            
+            // Return unchanged config if model is already set
+            return prevConfig;
+          });
         }
       } else {
         console.warn('Failed to fetch OpenAI models:', response.status);

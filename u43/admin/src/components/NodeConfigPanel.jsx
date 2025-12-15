@@ -13,6 +13,9 @@ export default function NodeConfigPanel() {
   // Track last focused input for variable insertion in HTTP tools
   const lastFocusedInputRef = useRef(null);
   const lastFocusedInputInfoRef = useRef({ index: null, isKey: false, inputKey: null });
+  // Track last focused textarea for variable insertion (for message fields)
+  const lastFocusedTextareaRef = useRef(null);
+  const lastFocusedTextareaInputKeyRef = useRef(null);
   
   // Find connected source nodes for condition nodes, agent nodes, and action nodes
   const getConnectedSourceNodes = () => {
@@ -572,7 +575,7 @@ export default function NodeConfigPanel() {
                       <strong>Examples:</strong>
                       <ul className="ml-4 mt-1 space-y-0.5 list-disc">
                         <li><code>{'{{trigger_data.content}}'}</code> - Comment content</li>
-                        <li><code>{'{{node_123.decision}}'}</code> - Decision from another agent node</li>
+                        <li><code>{'{{node_123.response}}'}</code> - Response from another agent node</li>
                         <li><code>{'{{node_123.results[0].status}}'}</code> - First result status</li>
                       </ul>
                     </div>
@@ -594,20 +597,42 @@ export default function NodeConfigPanel() {
                       let suggestions = [];
                       
                       if (nodeType === 'agent') {
-                        suggestions = [
-                          { 
-                            label: 'Decision', 
-                            description: 'The decision made (yes, no, maybe, etc.)',
-                            value: `{{${nodeId}.decision}}`,
-                            displayValue: `{{node.decision}}`
-                          },
-                          { 
-                            label: 'Reasoning', 
-                            description: 'The explanation for the decision',
-                            value: `{{${nodeId}.reasoning}}`,
-                            displayValue: `{{node.reasoning}}`
-                          },
-                        ];
+                        // Get outputs from agent config
+                        const agentId = sourceNode.data.config?.agent_id || sourceNode.data.agentId;
+                        if (agentId) {
+                          // Try both underscore and hyphen versions
+                          const normalizedAgentId = agentId.replace(/-/g, '_');
+                          const normalizedAgentIdHyphen = agentId.replace(/_/g, '-');
+                          const agentConfig = agentConfigs[agentId] || agentConfigs[normalizedAgentId] || agentConfigs[normalizedAgentIdHyphen];
+                          if (agentConfig && agentConfig.outputs) {
+                            suggestions = Object.entries(agentConfig.outputs).map(([key, output]) => ({
+                              label: output.label || key,
+                              description: `Type: ${output.type || 'string'}`,
+                              value: `{{${nodeId}.${key}}}`,
+                              displayValue: `{{node.${key}}}`
+                            }));
+                          } else {
+                            // Fallback if agent config not found
+                            suggestions = [
+                              { 
+                                label: 'Output', 
+                                description: 'The output from this agent',
+                                value: `{{${nodeId}}}`,
+                                displayValue: `{{node}}`
+                              },
+                            ];
+                          }
+                        } else {
+                          // Fallback if agent ID not found
+                          suggestions = [
+                            { 
+                              label: 'Output', 
+                              description: 'The output from this agent',
+                              value: `{{${nodeId}}}`,
+                              displayValue: `{{node}}`
+                            },
+                          ];
+                        }
                       } else if (nodeType === 'trigger') {
                         // Get outputs from trigger config
                         const triggerId = sourceNode.data.config?.trigger_type || sourceNode.data.triggerType;
@@ -782,18 +807,39 @@ export default function NodeConfigPanel() {
                       let suggestions = [];
                       
                       if (nodeType === 'agent') {
-                        suggestions = [
-                          { 
-                            label: 'Decision', 
-                            description: 'The decision made (yes, no, maybe, etc.)',
-                            value: `{{${nodeId}.decision}}` 
-                          },
-                          { 
-                            label: 'Reasoning', 
-                            description: 'The explanation for the decision',
-                            value: `{{${nodeId}.reasoning}}` 
-                          },
-                        ];
+                        // Get outputs from agent config
+                        const agentId = sourceNode.data.config?.agent_id || sourceNode.data.agentId;
+                        if (agentId) {
+                          // Try both underscore and hyphen versions
+                          const normalizedAgentId = agentId.replace(/-/g, '_');
+                          const normalizedAgentIdHyphen = agentId.replace(/_/g, '-');
+                          const agentConfig = agentConfigs[agentId] || agentConfigs[normalizedAgentId] || agentConfigs[normalizedAgentIdHyphen];
+                          if (agentConfig && agentConfig.outputs) {
+                            suggestions = Object.entries(agentConfig.outputs).map(([key, output]) => ({
+                              label: output.label || key,
+                              description: `Type: ${output.type || 'string'}`,
+                              value: `{{${nodeId}.${key}}}`
+                            }));
+                          } else {
+                            // Fallback if agent config not found
+                            suggestions = [
+                              { 
+                                label: 'Output', 
+                                description: 'The output from this agent',
+                                value: `{{${nodeId}}}`
+                              },
+                            ];
+                          }
+                        } else {
+                          // Fallback if agent ID not found
+                          suggestions = [
+                            { 
+                              label: 'Output', 
+                              description: 'The output from this agent',
+                              value: `{{${nodeId}}}`
+                            },
+                          ];
+                        }
                       } else if (nodeType === 'trigger') {
                         suggestions = [
                           { 
@@ -865,7 +911,7 @@ export default function NodeConfigPanel() {
                 type="text"
                 value={config.field || ''}
                 onChange={(e) => setConfig({ ...config, field: e.target.value })}
-                placeholder="e.g., {'{{'}agent_node_id.decision{'}}'} or {'{{'}trigger_data.comment_id{'}}'}"
+                placeholder="e.g., {'{{'}agent_node_id.response{'}}'} or {'{{'}trigger_data.comment_id{'}}'}"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
               <div className="mt-2 p-3 bg-blue-50 rounded-md">
@@ -874,8 +920,8 @@ export default function NodeConfigPanel() {
                   <div>
                     <strong>From Agent Nodes:</strong>
                     <ul className="ml-4 mt-1 space-y-0.5 list-disc">
-                      <li>Use {'{{'}node_name.decision{'}}'} to check the decision</li>
-                      <li>Use {'{{'}node_name.reasoning{'}}'} to check the reasoning</li>
+                      <li>Use {'{{'}node_name.output_field{'}}'} to access agent outputs (e.g., response, decision, reasoning)</li>
+                      <li>Available outputs depend on the agent type</li>
                     </ul>
                   </div>
                   <div>
@@ -1124,20 +1170,42 @@ export default function NodeConfigPanel() {
                                   let suggestions = [];
                                   
                                   if (nodeType === 'agent') {
-                                    suggestions = [
-                                      { 
-                                        label: 'Decision', 
-                                        description: 'The decision made (yes, no, maybe, etc.)',
-                                        value: `{{${nodeId}.decision}}`,
-                                        displayValue: `{{node.decision}}`
-                                      },
-                                      { 
-                                        label: 'Reasoning', 
-                                        description: 'The explanation for the decision',
-                                        value: `{{${nodeId}.reasoning}}`,
-                                        displayValue: `{{node.reasoning}}`
-                                      },
-                                    ];
+                                    // Get outputs from agent config
+                                    const agentId = sourceNode.data.config?.agent_id || sourceNode.data.agentId;
+                                    if (agentId) {
+                                      // Try both underscore and hyphen versions
+                                      const normalizedAgentId = agentId.replace(/-/g, '_');
+                                      const normalizedAgentIdHyphen = agentId.replace(/_/g, '-');
+                                      const agentConfig = agentConfigs[agentId] || agentConfigs[normalizedAgentId] || agentConfigs[normalizedAgentIdHyphen];
+                                      if (agentConfig && agentConfig.outputs) {
+                                        suggestions = Object.entries(agentConfig.outputs).map(([key, output]) => ({
+                                          label: output.label || key,
+                                          description: `Type: ${output.type || 'string'}`,
+                                          value: `{{${nodeId}.${key}}}`,
+                                          displayValue: `{{node.${key}}}`
+                                        }));
+                                      } else {
+                                        // Fallback if agent config not found
+                                        suggestions = [
+                                          { 
+                                            label: 'Output', 
+                                            description: 'The output from this agent',
+                                            value: `{{${nodeId}}}`,
+                                            displayValue: `{{node}}`
+                                          },
+                                        ];
+                                      }
+                                    } else {
+                                      // Fallback if agent ID not found
+                                      suggestions = [
+                                        { 
+                                          label: 'Output', 
+                                          description: 'The output from this agent',
+                                          value: `{{${nodeId}}}`,
+                                          displayValue: `{{node}}`
+                                        },
+                                      ];
+                                    }
                                   } else if (nodeType === 'trigger') {
                                     // Get outputs from trigger config
                                     const triggerId = sourceNode.data.config?.trigger_type || sourceNode.data.triggerType;
@@ -1402,15 +1470,176 @@ export default function NodeConfigPanel() {
                     );
                   }
                   
-                  // Special handling for message field - make it a larger textarea
+                  // Special handling for message field - make it a larger textarea with variable suggestions
                   if (inputKey === 'message' || inputKey === 'body_text') {
+                    // Combine trigger nodes and connected source nodes for variable suggestions
+                    const allSourceNodes = [...triggerNodes, ...connectedSourceNodes.filter(node => 
+                      !triggerNodes.some(trigger => trigger.id === node.id)
+                    )];
+                    
                     return (
                       <div key={inputKey}>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
                           {inputConfig.label || inputKey}
                           {inputConfig.required && <span className="text-red-500 ml-1">*</span>}
                         </label>
+                        
+                        {/* Show variable suggestions */}
+                        {allSourceNodes.length > 0 && (
+                          <div className="mb-3 p-3 bg-green-50 border border-green-200 rounded-md max-w-full overflow-hidden">
+                            <p className="text-xs font-semibold text-green-900 mb-2 flex items-center gap-1">
+                              <span>✓</span> Available Variables - Click to insert:
+                            </p>
+                            <div className="space-y-2 max-h-64 overflow-y-auto overflow-x-hidden pr-1">
+                              {allSourceNodes.map((sourceNode) => {
+                                const nodeId = sourceNode.id;
+                                const nodeType = sourceNode.data.nodeType;
+                                const nodeLabel = sourceNode.data.label || sourceNode.data.config?.title || 'Untitled Node';
+                                let suggestions = [];
+                                
+                                if (nodeType === 'trigger') {
+                                  const triggerId = sourceNode.data.config?.trigger_type || sourceNode.data.triggerType;
+                                  if (triggerId && triggerConfigs[triggerId] && triggerConfigs[triggerId].outputs) {
+                                    suggestions = Object.entries(triggerConfigs[triggerId].outputs).map(([key, output]) => ({
+                                      label: output.label || key,
+                                      description: `Type: ${output.type || 'string'}`,
+                                      value: `{{trigger_data.${key}}}`
+                                    }));
+                                  }
+                                } else if (nodeType === 'action') {
+                                  const toolId = sourceNode.data.config?.tool_id || sourceNode.data.toolId;
+                                  if (toolId) {
+                                    const normalizedToolId = toolId.replace(/-/g, '_');
+                                    const normalizedToolIdHyphen = toolId.replace(/_/g, '-');
+                                    const toolConfig = toolConfigs[toolId] || toolConfigs[normalizedToolId] || toolConfigs[normalizedToolIdHyphen];
+                                    if (toolConfig && toolConfig.outputs) {
+                                      suggestions = Object.entries(toolConfig.outputs).map(([key, output]) => ({
+                                        label: output.label || key,
+                                        description: `Type: ${output.type || 'string'}`,
+                                        value: `{{${nodeId}.${key}}}`
+                                      }));
+                                    }
+                                  }
+                                } else if (nodeType === 'agent') {
+                                  // Get outputs from agent config
+                                  const agentId = sourceNode.data.config?.agent_id || sourceNode.data.agentId;
+                                  if (agentId) {
+                                    // Try both underscore and hyphen versions
+                                    const normalizedAgentId = agentId.replace(/-/g, '_');
+                                    const normalizedAgentIdHyphen = agentId.replace(/_/g, '-');
+                                    const agentConfig = agentConfigs[agentId] || agentConfigs[normalizedAgentId] || agentConfigs[normalizedAgentIdHyphen];
+                                    if (agentConfig && agentConfig.outputs) {
+                                      suggestions = Object.entries(agentConfig.outputs).map(([key, output]) => ({
+                                        label: output.label || key,
+                                        description: `Type: ${output.type || 'string'}`,
+                                        value: `{{${nodeId}.${key}}}`
+                                      }));
+                                    } else {
+                                      // Fallback if agent config not found
+                                      suggestions = [
+                                        { 
+                                          label: 'Output', 
+                                          description: 'The output from this agent',
+                                          value: `{{${nodeId}}}`
+                                        },
+                                      ];
+                                    }
+                                  } else {
+                                    // Fallback if agent ID not found
+                                    suggestions = [
+                                      { 
+                                        label: 'Output', 
+                                        description: 'The output from this agent',
+                                        value: `{{${nodeId}}}`
+                                      },
+                                    ];
+                                  }
+                                }
+                                
+                                if (suggestions.length === 0) return null;
+                                
+                                return (
+                                  <div key={nodeId} className="bg-white rounded p-2 border border-green-100 max-w-full overflow-hidden">
+                                    <div className="flex items-center gap-2 mb-1 min-w-0">
+                                      <span className="text-xs font-semibold text-green-900 truncate">{nodeLabel}</span>
+                                      <span className="text-xs text-gray-500 flex-shrink-0">({nodeType})</span>
+                                    </div>
+                                    <div className="space-y-1">
+                                      {suggestions.map((suggestion, idx) => (
+                                        <button
+                                          key={idx}
+                                          type="button"
+                                          onMouseDown={(e) => {
+                                            // Prevent button from taking focus
+                                            e.preventDefault();
+                                          }}
+                                          onClick={() => {
+                                            // Use the stored last focused textarea
+                                            const textarea = lastFocusedTextareaRef.current;
+                                            const storedInputKey = lastFocusedTextareaInputKeyRef.current;
+                                            
+                                            if (textarea && storedInputKey === inputKey) {
+                                              const start = textarea.selectionStart || 0;
+                                              const end = textarea.selectionEnd || 0;
+                                              const currentValue = textarea.value || '';
+                                              const newValue = currentValue.slice(0, start) + suggestion.value + currentValue.slice(end);
+                                              
+                                              setConfig({
+                                                ...config,
+                                                inputs: {
+                                                  ...(config.inputs || {}),
+                                                  [inputKey]: newValue,
+                                                },
+                                              });
+                                              
+                                              // Set cursor position after inserted text
+                                              setTimeout(() => {
+                                                if (textarea) {
+                                                  textarea.focus();
+                                                  const newPos = start + suggestion.value.length;
+                                                  textarea.setSelectionRange(newPos, newPos);
+                                                }
+                                              }, 0);
+                                            }
+                                          }}
+                                          className="block w-full text-left p-1.5 rounded hover:bg-blue-50 transition-colors group min-w-0"
+                                          title={suggestion.description}
+                                        >
+                                          <div className="flex items-center gap-2 min-w-0">
+                                            <span className="text-xs font-medium text-blue-700 group-hover:text-blue-900 truncate">
+                                              {suggestion.label}
+                                            </span>
+                                            <span 
+                                              className="text-xs text-gray-500 font-mono truncate"
+                                              title={suggestion.value}
+                                            >
+                                              {suggestion.value}
+                                            </span>
+                                          </div>
+                                          <div className="text-xs text-gray-500 mt-0.5 truncate">
+                                            {suggestion.description}
+                                          </div>
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                        
                         <textarea
+                          ref={(el) => {
+                            if (el) {
+                              lastFocusedTextareaRef.current = el;
+                              lastFocusedTextareaInputKeyRef.current = inputKey;
+                            }
+                          }}
+                          onFocus={(e) => {
+                            lastFocusedTextareaRef.current = e.target;
+                            lastFocusedTextareaInputKeyRef.current = inputKey;
+                          }}
                           value={inputValue}
                           onChange={(e) => setConfig({
                             ...config,
@@ -1419,9 +1648,9 @@ export default function NodeConfigPanel() {
                               [inputKey]: e.target.value,
                             },
                           })}
-                          placeholder={inputConfig.description || `Enter ${inputKey}`}
+                          placeholder={inputConfig.description || `Enter ${inputKey} (use {{variables}} from previous nodes)`}
                           rows={6}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
                         />
                         {inputConfig.description && (
                           <p className="text-xs text-gray-500 mt-1">{inputConfig.description}</p>
@@ -1506,10 +1735,30 @@ export default function NodeConfigPanel() {
                                       }
                                     }
                                   } else if (nodeType === 'agent') {
-                                    suggestions = [
-                                      { label: 'Decision', value: `{{${nodeId}.decision}}` },
-                                      { label: 'Reasoning', value: `{{${nodeId}.reasoning}}` },
-                                    ];
+                                    // Get outputs from agent config
+                                    const agentId = sourceNode.data.config?.agent_id || sourceNode.data.agentId;
+                                    if (agentId) {
+                                      // Try both underscore and hyphen versions
+                                      const normalizedAgentId = agentId.replace(/-/g, '_');
+                                      const normalizedAgentIdHyphen = agentId.replace(/_/g, '-');
+                                      const agentConfig = agentConfigs[agentId] || agentConfigs[normalizedAgentId] || agentConfigs[normalizedAgentIdHyphen];
+                                      if (agentConfig && agentConfig.outputs) {
+                                        suggestions = Object.entries(agentConfig.outputs).map(([key, output]) => ({
+                                          label: output.label || key,
+                                          value: `{{${nodeId}.${key}}}`
+                                        }));
+                                      } else {
+                                        // Fallback if agent config not found
+                                        suggestions = [
+                                          { label: 'Output', value: `{{${nodeId}}}` },
+                                        ];
+                                      }
+                                    } else {
+                                      // Fallback if agent ID not found
+                                      suggestions = [
+                                        { label: 'Output', value: `{{${nodeId}}}` },
+                                      ];
+                                    }
                                   }
                                   
                                   if (suggestions.length === 0) return null;

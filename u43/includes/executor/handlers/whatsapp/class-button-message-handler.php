@@ -56,6 +56,16 @@ class Button_Message_Handler extends Node_Handler_Base {
                 $next_node = $find_node_callback($all_nodes, $next_node_id);
                 if ($next_node) {
                     try {
+                        // Update button message node output in context with button ID as a field
+                        // This allows {{parents.action.btn1}} to resolve correctly
+                        $node_id = $node['id'];
+                        if (isset($context[$node_id]) && is_array($context[$node_id])) {
+                            $button_id = $output['button_id'] ?? '';
+                            $button_title = $output['button_title'] ?? $button_id;
+                            // Add button ID as a field with button title as value so {{parents.action.btn1}} resolves to "Dhaka"
+                            $context[$node_id][$button_id] = $button_title;
+                        }
+                        
                         // Pass button details to connected node
                         $button_context = $context;
                         $button_context['button_data'] = [

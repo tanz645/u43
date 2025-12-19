@@ -149,15 +149,52 @@ class Get_Product extends Tool_Base {
     /**
      * Resolve variable from context
      *
-     * @param string $variable Variable expression (e.g., {{trigger_data.product_id}})
+     * @param string $variable Variable expression (e.g., {{trigger_data.product_id}}, {{parents.action.btn1}})
      * @param array $context Execution context
      * @return mixed|null
      */
     private function resolve_variable($variable, $context) {
-        // Handle template syntax {{variable}} or {{node_id.field}}
+        // Handle template syntax {{variable}} or {{node_id.field}} or {{parents.type.field}}
         if (preg_match_all('/\{\{([^}]+)\}\}/', $variable, $matches)) {
             foreach ($matches[1] as $match) {
                 $path = trim($match);
+                
+                // Check for combined parent variable pattern: parents.<type>.<field>
+                if (preg_match('/^parents\.([a-zA-Z0-9_]+)\.(.+)$/', $path, $parent_match)) {
+                    $parent_type = $parent_match[1];
+                    $field_path = $parent_match[2];
+                    
+                    // Find all nodes of the specified type that have been executed
+                    $node_types = $context['_node_types'] ?? [];
+                    $matching_nodes = [];
+                    
+                    foreach ($node_types as $node_id => $node_type) {
+                        if ($node_type === $parent_type && isset($context[$node_id])) {
+                            $matching_nodes[] = $node_id;
+                        }
+                    }
+                    
+                    // If we have matching nodes, try to resolve the field from the first one
+                    if (!empty($matching_nodes)) {
+                        // Try nodes in reverse order (most recently executed first)
+                        $matching_nodes = array_reverse($matching_nodes);
+                        foreach ($matching_nodes as $node_id) {
+                            $node_output = $context[$node_id];
+                            if (is_array($node_output)) {
+                                // Resolve field path within the node output
+                                $field_value = $this->resolve_field_path($field_path, $node_output);
+                                if ($field_value !== null) {
+                                    return $field_value;
+                                }
+                            }
+                        }
+                    }
+                    
+                    // No matching parent node found
+                    return null;
+                }
+                
+                // Standard variable path resolution
                 $parts = explode('.', $path);
                 $value = $context;
                 
@@ -179,6 +216,57 @@ class Get_Product extends Tool_Base {
         }
         
         return null;
+    }
+    
+    /**
+     * Resolve a field path within a data structure (supports dots and array brackets)
+     * Helper function for resolving nested fields in parent node outputs
+     *
+     * @param string $field_path Field path (e.g., "btn1", "response", "results[0].status")
+     * @param mixed $data Data structure to search in
+     * @return mixed Resolved value or null
+     */
+    private function resolve_field_path($field_path, $data) {
+        if (!is_array($data)) {
+            return null;
+        }
+        
+        $remaining_path = trim($field_path);
+        $var_value = $data;
+        
+        while (!empty($remaining_path)) {
+            // Check for array bracket pattern: key[index]
+            if (preg_match('/^([a-zA-Z0-9_]+)\[(\d+)\](.*)$/', $remaining_path, $array_match)) {
+                $key = $array_match[1];
+                $index = (int)$array_match[2];
+                $remaining_path = ltrim($array_match[3], '.');
+                
+                if (is_array($var_value) && isset($var_value[$key]) && is_array($var_value[$key])) {
+                    if (isset($var_value[$key][$index])) {
+                        $var_value = $var_value[$key][$index];
+                    } else {
+                        return null;
+                    }
+                } else {
+                    return null;
+                }
+            } 
+            // Check for simple key access
+            elseif (preg_match('/^([a-zA-Z0-9_]+)(.*)$/', $remaining_path, $key_match)) {
+                $key = $key_match[1];
+                $remaining_path = ltrim($key_match[2], '.');
+                
+                if (is_array($var_value) && isset($var_value[$key])) {
+                    $var_value = $var_value[$key];
+                } else {
+                    return null;
+                }
+            } else {
+                return null;
+            }
+        }
+        
+        return $var_value;
     }
 }
 

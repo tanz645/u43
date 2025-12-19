@@ -335,14 +335,59 @@ class HTTP_Get extends Tool_Base {
     /**
      * Resolve a variable path (supports dots and array brackets)
      * Examples: trigger_data.content, node_123.decision, node_123.results[0].status
+     * Also supports: parents.agent.response, parents.action.btn1
      *
      * @param string $path Variable path
      * @param array $context Execution context
      * @return mixed Resolved value or null
      */
     private function resolve_variable_path($path, $context) {
-        $parts = explode('.', $path);
-        $value = $context;
+        $remaining_path = trim($path);
+        
+        // Check for combined parent variable pattern: parents.<type>.<field>
+        if (preg_match('/^parents\.([a-zA-Z0-9_]+)\.(.+)$/', $remaining_path, $parent_match)) {
+            $parent_type = $parent_match[1];
+            $field_path = $parent_match[2];
+            
+            // Find all nodes of the specified type that have been executed
+            $node_types = $context['_node_types'] ?? [];
+            $matching_nodes = [];
+            
+            foreach ($node_types as $node_id => $node_type) {
+                if ($node_type === $parent_type && isset($context[$node_id])) {
+                    $matching_nodes[] = $node_id;
+                }
+            }
+            
+            // If we have matching nodes, try to resolve the field from the first one
+            if (!empty($matching_nodes)) {
+                // Try nodes in reverse order (most recently executed first)
+                $matching_nodes = array_reverse($matching_nodes);
+                
+                // First, try to find a node that has the field (for button message nodes, prioritize nodes with the button ID)
+                foreach ($matching_nodes as $node_id) {
+                    $node_output = $context[$node_id];
+                    if (is_array($node_output)) {
+                        // Check if this node has the field directly (for button IDs, check if the field exists as a key)
+                        if (isset($node_output[$field_path])) {
+                            return $node_output[$field_path];
+                        }
+                        // Otherwise, try to resolve field path within the node output
+                        $field_value = $this->resolve_field_path($field_path, $node_output);
+                        if ($field_value !== null) {
+                            return $field_value;
+                        }
+                    }
+                }
+            }
+            
+            // No matching parent node found
+            return null;
+        }
+        
+        // Standard variable path resolution
+        $var_value = $context;
+        $parts = explode('.', $remaining_path);
         
         foreach ($parts as $part) {
             // Handle array brackets like results[0]
@@ -350,25 +395,76 @@ class HTTP_Get extends Tool_Base {
                 $key = $matches[1];
                 $index = (int)$matches[2];
                 
-                if (is_array($value) && isset($value[$key]) && is_array($value[$key])) {
-                    $value = isset($value[$key][$index]) ? $value[$key][$index] : null;
+                if (is_array($var_value) && isset($var_value[$key]) && is_array($var_value[$key])) {
+                    $var_value = isset($var_value[$key][$index]) ? $var_value[$key][$index] : null;
                 } else {
                     return null;
                 }
             } else {
-                if (is_array($value) && isset($value[$part])) {
-                    $value = $value[$part];
+                if (is_array($var_value) && isset($var_value[$part])) {
+                    $var_value = $var_value[$part];
                 } else {
                     return null;
                 }
             }
             
-            if ($value === null) {
+            if ($var_value === null) {
                 break;
             }
         }
         
-        return $value;
+        return $var_value;
+    }
+    
+    /**
+     * Resolve a field path within a data structure (supports dots and array brackets)
+     * Helper function for resolving nested fields in parent node outputs
+     *
+     * @param string $field_path Field path (e.g., "btn1", "response", "results[0].status")
+     * @param mixed $data Data structure to search in
+     * @return mixed Resolved value or null
+     */
+    private function resolve_field_path($field_path, $data) {
+        if (!is_array($data)) {
+            return null;
+        }
+        
+        $remaining_path = trim($field_path);
+        $var_value = $data;
+        
+        while (!empty($remaining_path)) {
+            // Check for array bracket pattern: key[index]
+            if (preg_match('/^([a-zA-Z0-9_]+)\[(\d+)\](.*)$/', $remaining_path, $array_match)) {
+                $key = $array_match[1];
+                $index = (int)$array_match[2];
+                $remaining_path = ltrim($array_match[3], '.');
+                
+                if (is_array($var_value) && isset($var_value[$key]) && is_array($var_value[$key])) {
+                    if (isset($var_value[$key][$index])) {
+                        $var_value = $var_value[$key][$index];
+                    } else {
+                        return null;
+                    }
+                } else {
+                    return null;
+                }
+            } 
+            // Check for simple key access
+            elseif (preg_match('/^([a-zA-Z0-9_]+)(.*)$/', $remaining_path, $key_match)) {
+                $key = $key_match[1];
+                $remaining_path = ltrim($key_match[2], '.');
+                
+                if (is_array($var_value) && isset($var_value[$key])) {
+                    $var_value = $var_value[$key];
+                } else {
+                    return null;
+                }
+            } else {
+                return null;
+            }
+        }
+        
+        return $var_value;
     }
     
     /**

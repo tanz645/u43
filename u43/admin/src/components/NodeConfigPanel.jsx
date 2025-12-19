@@ -53,8 +53,214 @@ export default function NodeConfigPanel() {
     return nodes.filter(node => node.data?.nodeType === 'trigger');
   };
   
+  // Group parent nodes by type and output structure, creating combined variables
+  const getGroupedParentNodes = () => {
+    const connectedSourceNodes = getConnectedSourceNodes();
+    if (connectedSourceNodes.length === 0) {
+      return { grouped: [], individual: [] };
+    }
+    
+    // Helper function to get node outputs
+    const getNodeOutputs = (node) => {
+      const nodeType = node.data?.nodeType;
+      const nodeId = node.id;
+      
+      if (nodeType === 'trigger') {
+        const triggerId = node.data.config?.trigger_type || node.data.triggerType;
+        if (triggerId && triggerConfigs[triggerId]?.outputs) {
+          return triggerConfigs[triggerId].outputs;
+        }
+        return null;
+      } else if (nodeType === 'agent') {
+        const agentId = node.data.config?.agent_id || node.data.agentId;
+        if (agentId) {
+          const normalizedAgentId = agentId.replace(/-/g, '_');
+          const normalizedAgentIdHyphen = agentId.replace(/_/g, '-');
+          const agentConfig = agentConfigs[agentId] || agentConfigs[normalizedAgentId] || agentConfigs[normalizedAgentIdHyphen];
+          if (agentConfig?.outputs) {
+            return agentConfig.outputs;
+          }
+        }
+        return null;
+      } else if (nodeType === 'action') {
+        const toolId = node.data.config?.tool_id || node.data.toolId;
+        if (toolId) {
+          const normalizedToolId = toolId.replace(/-/g, '_');
+          const normalizedToolIdHyphen = toolId.replace(/_/g, '-');
+          const toolConfig = toolConfigs[toolId] || toolConfigs[normalizedToolId] || toolConfigs[normalizedToolIdHyphen];
+          
+          // Special handling for button message nodes - generate outputs from buttons
+          if (toolId === 'whatsapp_send_button_message' || normalizedToolId === 'whatsapp_send_button_message' || normalizedToolIdHyphen === 'whatsapp_send_button_message') {
+            const buttons = node.data.config?.inputs?.buttons || [];
+            // Only generate outputs if buttons exist and have valid IDs
+            if (Array.isArray(buttons) && buttons.length > 0) {
+              const buttonOutputs = {};
+              buttons.forEach((button, index) => {
+                // Only add output if button has an ID
+                if (button && button.id) {
+                  const buttonId = button.id;
+                  const buttonTitle = button.title || buttonId;
+                  buttonOutputs[buttonId] = {
+                    type: 'string',
+                    label: buttonTitle
+                  };
+                }
+              });
+              // Only return outputs if we have valid button outputs
+              if (Object.keys(buttonOutputs).length > 0) {
+                return buttonOutputs;
+              }
+            }
+            // For button message nodes, return empty object if no buttons configured
+            return {};
+          }
+          
+          if (toolConfig?.outputs) {
+            return toolConfig.outputs;
+          }
+        }
+        return null;
+      }
+      return null;
+    };
+    
+    // Helper function to create output signature (for comparing outputs)
+    const getOutputSignature = (outputs) => {
+      if (!outputs) return null;
+      return Object.keys(outputs).sort().join('|');
+    };
+    
+    // Group nodes by type and output signature
+    // For agent nodes, also group by agent_id to ensure nodes with same agent type are grouped
+    const groups = {};
+    const individualNodes = [];
+    
+    connectedSourceNodes.forEach(node => {
+      const nodeType = node.data?.nodeType;
+      const outputs = getNodeOutputs(node);
+      const signature = getOutputSignature(outputs);
+      
+      // For agent nodes, include agent_id in the grouping key to ensure same agent types are grouped
+      let groupKey;
+      if (nodeType === 'agent') {
+        const agentId = node.data.config?.agent_id || node.data.agentId || '';
+        const normalizedAgentId = agentId.replace(/-/g, '_').replace(/_/g, '-');
+        // Group by agent_id first, then by output signature
+        groupKey = `${nodeType}_${normalizedAgentId}_${signature || 'no_outputs'}`;
+      } else {
+        // For other node types, group by type and output signature
+        groupKey = `${nodeType}_${signature || 'no_outputs'}`;
+      }
+      
+      if (!groups[groupKey]) {
+        groups[groupKey] = {
+          type: nodeType,
+          nodes: [],
+          outputs: outputs,
+          signature: signature
+        };
+      }
+      
+      groups[groupKey].nodes.push(node);
+    });
+    
+    // Special handling: Group all button message nodes together and combine their buttons
+    const buttonMessageNodes = connectedSourceNodes.filter(node => {
+      const toolId = node.data.config?.tool_id || node.data.toolId;
+      return toolId === 'whatsapp_send_button_message' || 
+             toolId?.replace(/-/g, '_') === 'whatsapp_send_button_message' ||
+             toolId?.replace(/_/g, '-') === 'whatsapp-send-button-message';
+    });
+    
+    // If we have multiple button message nodes, combine all their buttons
+    if (buttonMessageNodes.length > 1) {
+      const combinedButtonOutputs = {};
+      const allButtonNodes = [];
+      
+      buttonMessageNodes.forEach(node => {
+        const outputs = getNodeOutputs(node);
+        if (outputs) {
+          // Merge all button outputs (unique button IDs)
+          Object.assign(combinedButtonOutputs, outputs);
+          allButtonNodes.push(node);
+        }
+      });
+      
+      // Remove button message nodes from regular groups
+      Object.keys(groups).forEach(groupKey => {
+        groups[groupKey].nodes = groups[groupKey].nodes.filter(node => {
+          const toolId = node.data.config?.tool_id || node.data.toolId;
+          return !(toolId === 'whatsapp_send_button_message' || 
+                  toolId?.replace(/-/g, '_') === 'whatsapp_send_button_message' ||
+                  toolId?.replace(/_/g, '-') === 'whatsapp-send-button-message');
+        });
+      });
+      
+      // Add combined button message group if we have outputs
+      if (Object.keys(combinedButtonOutputs).length > 0 && allButtonNodes.length > 1) {
+        groups['action_button_message_combined'] = {
+          type: 'action',
+          nodes: allButtonNodes,
+          outputs: combinedButtonOutputs,
+          signature: Object.keys(combinedButtonOutputs).sort().join('|'),
+          isButtonMessageGroup: true
+        };
+      } else if (allButtonNodes.length === 1) {
+        // Single button message node - add to individual
+        individualNodes.push({
+          node: allButtonNodes[0],
+          outputs: getNodeOutputs(allButtonNodes[0]),
+          isCombined: false
+        });
+      }
+    }
+    
+    // Convert groups to array format and separate grouped vs individual
+    const grouped = [];
+    Object.values(groups).forEach(group => {
+      // Skip empty groups
+      if (group.nodes.length === 0) return;
+      
+      // For agent nodes, try to get outputs from the first node if not already set
+      if (group.type === 'agent' && (!group.outputs || Object.keys(group.outputs).length === 0)) {
+        const firstNode = group.nodes[0];
+        const agentId = firstNode.data.config?.agent_id || firstNode.data.agentId;
+        if (agentId) {
+          const normalizedAgentId = agentId.replace(/-/g, '_');
+          const normalizedAgentIdHyphen = agentId.replace(/_/g, '-');
+          const agentConfig = agentConfigs[agentId] || agentConfigs[normalizedAgentId] || agentConfigs[normalizedAgentIdHyphen];
+          if (agentConfig?.outputs) {
+            group.outputs = agentConfig.outputs;
+            group.signature = getOutputSignature(agentConfig.outputs);
+          }
+        }
+      }
+      
+      if (group.nodes.length > 1 && group.outputs && Object.keys(group.outputs).length > 0) {
+        // Multiple nodes with same type and outputs - create combined variable
+        grouped.push({
+          ...group,
+          isCombined: true,
+          combinedVariablePrefix: `parents.${group.type}`
+        });
+      } else {
+        // Single node or no outputs - show individually
+        group.nodes.forEach(node => {
+          individualNodes.push({
+            node: node,
+            outputs: getNodeOutputs(node),
+            isCombined: false
+          });
+        });
+      }
+    });
+    
+    return { grouped, individual: individualNodes };
+  };
+  
   const connectedSourceNodes = getConnectedSourceNodes();
   const triggerNodes = getTriggerNodes();
+  const { grouped: groupedParentNodes, individual: individualParentNodes } = getGroupedParentNodes();
   
   // Fetch OpenAI models
   const fetchOpenAIModels = async (currentConfig = null) => {
@@ -584,107 +790,105 @@ export default function NodeConfigPanel() {
               )}
               
               {/* Show connected nodes for variable suggestions */}
-              {connectedSourceNodes.length > 0 && (
+              {(groupedParentNodes.length > 0 || individualParentNodes.length > 0) && (
                 <div className="mb-3 p-3 bg-green-50 border border-green-200 rounded-md max-w-full overflow-hidden">
                   <p className="text-xs font-semibold text-green-900 mb-2 flex items-center gap-1">
                     <span>✓</span> Connected Nodes - Click to insert variable:
                   </p>
                   <div className="space-y-2 max-h-64 overflow-y-auto overflow-x-hidden pr-1">
-                    {connectedSourceNodes.map((sourceNode) => {
+                    {/* Show combined variables for grouped nodes */}
+                    {groupedParentNodes.map((group, groupIdx) => {
+                      if (!group.outputs) return null;
+                      
+                      const nodeTypeLabel = group.type.charAt(0).toUpperCase() + group.type.slice(1);
+                      const nodeLabels = group.nodes.map(n => n.data.label || n.data.config?.title || 'Untitled Node').join(', ');
+                      
+                      return (
+                        <div key={`group_${groupIdx}`} className="bg-white rounded p-2 border border-blue-200 max-w-full overflow-hidden">
+                          <div className="flex items-center gap-2 mb-1 min-w-0">
+                            <span className="text-xs font-semibold text-blue-900 truncate">
+                              {nodeTypeLabel} Nodes ({group.nodes.length})
+                            </span>
+                            <span className="text-xs text-gray-500 flex-shrink-0">Combined</span>
+                          </div>
+                          <div className="text-xs text-gray-600 mb-2 truncate" title={nodeLabels}>
+                            {nodeLabels}
+                          </div>
+                          <div className="space-y-1">
+                            {Object.entries(group.outputs).map(([key, output]) => {
+                              const combinedValue = `{{parents.${group.type}.${key}}}`;
+                              return (
+                                <button
+                                  key={key}
+                                  type="button"
+                                  onClick={() => {
+                                    const textarea = promptTextareaRef.current;
+                                    const currentPrompt = config.prompt || '';
+                                    const cursorPos = textarea ? textarea.selectionStart : currentPrompt.length;
+                                    const newPrompt = currentPrompt.slice(0, cursorPos) + combinedValue + currentPrompt.slice(cursorPos);
+                                    setConfig({ ...config, prompt: newPrompt });
+                                    setTimeout(() => {
+                                      if (textarea) {
+                                        textarea.focus();
+                                        const newPos = cursorPos + combinedValue.length;
+                                        textarea.setSelectionRange(newPos, newPos);
+                                      }
+                                    }, 0);
+                                  }}
+                                  className="block w-full text-left p-1.5 rounded hover:bg-blue-50 transition-colors group min-w-0"
+                                  title={`Combined output from ${group.nodes.length} ${group.type} nodes. Type: ${output.type || 'string'}`}
+                                >
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span className="text-xs font-medium text-blue-700 group-hover:text-blue-900 truncate">
+                                      {output.label || key}
+                                    </span>
+                                    <span 
+                                      className="text-xs text-gray-500 font-mono truncate"
+                                      title={combinedValue}
+                                    >
+                                      {combinedValue}
+                                    </span>
+                                  </div>
+                                  <div className="text-xs text-gray-500 mt-0.5 truncate">
+                                    Combined from {group.nodes.length} nodes • Type: {output.type || 'string'}
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                    
+                    {/* Show individual nodes */}
+                    {individualParentNodes.map((item) => {
+                      const sourceNode = item.node;
                       const nodeId = sourceNode.id;
                       const nodeType = sourceNode.data.nodeType;
                       const nodeLabel = sourceNode.data.label || sourceNode.data.config?.title || 'Untitled Node';
                       let suggestions = [];
                       
-                      if (nodeType === 'agent') {
-                        // Get outputs from agent config
-                        const agentId = sourceNode.data.config?.agent_id || sourceNode.data.agentId;
-                        if (agentId) {
-                          // Try both underscore and hyphen versions
-                          const normalizedAgentId = agentId.replace(/-/g, '_');
-                          const normalizedAgentIdHyphen = agentId.replace(/_/g, '-');
-                          const agentConfig = agentConfigs[agentId] || agentConfigs[normalizedAgentId] || agentConfigs[normalizedAgentIdHyphen];
-                          if (agentConfig && agentConfig.outputs) {
-                            suggestions = Object.entries(agentConfig.outputs).map(([key, output]) => ({
-                              label: output.label || key,
-                              description: `Type: ${output.type || 'string'}`,
-                              value: `{{${nodeId}.${key}}}`,
-                              displayValue: `{{node.${key}}}`
-                            }));
-                          } else {
-                            // Fallback if agent config not found
-                            suggestions = [
-                              { 
-                                label: 'Output', 
-                                description: 'The output from this agent',
-                                value: `{{${nodeId}}}`,
-                                displayValue: `{{node}}`
-                              },
-                            ];
-                          }
-                        } else {
-                          // Fallback if agent ID not found
-                          suggestions = [
-                            { 
-                              label: 'Output', 
-                              description: 'The output from this agent',
-                              value: `{{${nodeId}}}`,
-                              displayValue: `{{node}}`
-                            },
-                          ];
-                        }
-                      } else if (nodeType === 'trigger') {
-                        // Get outputs from trigger config
-                        const triggerId = sourceNode.data.config?.trigger_type || sourceNode.data.triggerType;
-                        if (triggerId && triggerConfigs[triggerId] && triggerConfigs[triggerId].outputs) {
-                          suggestions = Object.entries(triggerConfigs[triggerId].outputs).map(([key, output]) => ({
-                            label: output.label || key,
-                            description: `Type: ${output.type || 'string'}`,
-                            value: `{{trigger_data.${key}}}`
-                          }));
-                        } else {
-                          // Fallback for common trigger outputs
-                          suggestions = [
-                            { 
-                              label: 'Comment ID', 
-                              description: 'The ID of the comment',
-                              value: `{{trigger_data.comment_id}}` 
-                            },
-                            { 
-                              label: 'Author', 
-                              description: 'The comment author name',
-                              value: `{{trigger_data.author}}` 
-                            },
-                            { 
-                              label: 'Content', 
-                              description: 'The comment text content',
-                              value: `{{trigger_data.content}}` 
-                            },
-                            { 
-                              label: 'Email', 
-                              description: 'The comment author email',
-                              value: `{{trigger_data.email}}` 
-                            },
-                          ];
-                        }
-                      } else if (nodeType === 'action') {
-                        // Get outputs from tool config
-                        const toolId = sourceNode.data.config?.tool_id || sourceNode.data.toolId;
-                        if (toolId) {
-                          const normalizedToolId = toolId.replace(/-/g, '_');
-                          const normalizedToolIdHyphen = toolId.replace(/_/g, '-');
-                          const toolConfig = toolConfigs[toolId] || toolConfigs[normalizedToolId] || toolConfigs[normalizedToolIdHyphen];
-                          if (toolConfig && toolConfig.outputs) {
-                            suggestions = Object.entries(toolConfig.outputs).map(([key, output]) => ({
-                              label: output.label || key,
-                              description: `Type: ${output.type || 'string'}`,
-                              value: `{{${nodeId}.${key}}}`,
-                              displayValue: `{{node.${key}}}`
-                            }));
-                          }
-                        }
+                      if (nodeType === 'agent' && item.outputs) {
+                        suggestions = Object.entries(item.outputs).map(([key, output]) => ({
+                          label: output.label || key,
+                          description: `Type: ${output.type || 'string'}`,
+                          value: `{{${nodeId}.${key}}}`,
+                          displayValue: `{{node.${key}}}`
+                        }));
+                      } else if (nodeType === 'trigger' && item.outputs) {
+                        suggestions = Object.entries(item.outputs).map(([key, output]) => ({
+                          label: output.label || key,
+                          description: `Type: ${output.type || 'string'}`,
+                          value: `{{trigger_data.${key}}}`
+                        }));
+                      } else if (nodeType === 'action' && item.outputs) {
+                        suggestions = Object.entries(item.outputs).map(([key, output]) => ({
+                          label: output.label || key,
+                          description: `Type: ${output.type || 'string'}`,
+                          value: `{{${nodeId}.${key}}}`,
+                          displayValue: `{{node.${key}}}`
+                        }));
                       } else {
-                        // For other node types, show generic output
                         suggestions = [
                           { 
                             label: 'Output', 
@@ -712,7 +916,6 @@ export default function NodeConfigPanel() {
                                   const cursorPos = textarea ? textarea.selectionStart : currentPrompt.length;
                                   const newPrompt = currentPrompt.slice(0, cursorPos) + suggestion.value + currentPrompt.slice(cursorPos);
                                   setConfig({ ...config, prompt: newPrompt });
-                                  // Focus back on textarea and set cursor position
                                   setTimeout(() => {
                                     if (textarea) {
                                       textarea.focus();
@@ -794,77 +997,87 @@ export default function NodeConfigPanel() {
               </label>
               
               {/* Show connected nodes */}
-              {connectedSourceNodes.length > 0 && (
+              {(groupedParentNodes.length > 0 || individualParentNodes.length > 0) && (
                 <div className="mb-3 p-3 bg-green-50 border border-green-200 rounded-md max-w-full overflow-hidden">
                   <p className="text-xs font-semibold text-green-900 mb-2 flex items-center gap-1">
                     <span>✓</span> Connected Nodes - Click to use:
                   </p>
                   <div className="space-y-2 max-h-64 overflow-y-auto overflow-x-hidden pr-1">
-                    {connectedSourceNodes.map((sourceNode) => {
+                    {/* Show combined variables for grouped nodes */}
+                    {groupedParentNodes.map((group, groupIdx) => {
+                      if (!group.outputs) return null;
+                      
+                      const nodeTypeLabel = group.type.charAt(0).toUpperCase() + group.type.slice(1);
+                      const nodeLabels = group.nodes.map(n => n.data.label || n.data.config?.title || 'Untitled Node').join(', ');
+                      
+                      return (
+                        <div key={`group_${groupIdx}`} className="bg-white rounded p-2 border border-blue-200 max-w-full overflow-hidden">
+                          <div className="flex items-center gap-2 mb-1 min-w-0">
+                            <span className="text-xs font-semibold text-blue-900 truncate">
+                              {nodeTypeLabel} Nodes ({group.nodes.length})
+                            </span>
+                            <span className="text-xs text-gray-500 flex-shrink-0">Combined</span>
+                          </div>
+                          <div className="text-xs text-gray-600 mb-2 truncate" title={nodeLabels}>
+                            {nodeLabels}
+                          </div>
+                          <div className="space-y-1">
+                            {Object.entries(group.outputs).map(([key, output]) => {
+                              const combinedValue = `{{parents.${group.type}.${key}}}`;
+                              return (
+                                <button
+                                  key={key}
+                                  type="button"
+                                  onClick={() => setConfig({ ...config, field: combinedValue })}
+                                  className="block w-full text-left p-1.5 rounded hover:bg-blue-50 transition-colors group min-w-0"
+                                  title={`Combined output from ${group.nodes.length} ${group.type} nodes. Type: ${output.type || 'string'}`}
+                                >
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span className="text-xs font-medium text-blue-700 group-hover:text-blue-900 truncate">
+                                      {output.label || key}
+                                    </span>
+                                    <span className="text-xs text-gray-500 font-mono truncate" title={combinedValue}>
+                                      {combinedValue}
+                                    </span>
+                                  </div>
+                                  <div className="text-xs text-gray-500 mt-0.5 truncate">
+                                    Combined from {group.nodes.length} nodes • Type: {output.type || 'string'}
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                    
+                    {/* Show individual nodes */}
+                    {individualParentNodes.map((item) => {
+                      const sourceNode = item.node;
                       const nodeId = sourceNode.id;
                       const nodeType = sourceNode.data.nodeType;
                       const nodeLabel = sourceNode.data.label || sourceNode.data.config?.title || 'Untitled Node';
                       let suggestions = [];
                       
-                      if (nodeType === 'agent') {
-                        // Get outputs from agent config
-                        const agentId = sourceNode.data.config?.agent_id || sourceNode.data.agentId;
-                        if (agentId) {
-                          // Try both underscore and hyphen versions
-                          const normalizedAgentId = agentId.replace(/-/g, '_');
-                          const normalizedAgentIdHyphen = agentId.replace(/_/g, '-');
-                          const agentConfig = agentConfigs[agentId] || agentConfigs[normalizedAgentId] || agentConfigs[normalizedAgentIdHyphen];
-                          if (agentConfig && agentConfig.outputs) {
-                            suggestions = Object.entries(agentConfig.outputs).map(([key, output]) => ({
-                              label: output.label || key,
-                              description: `Type: ${output.type || 'string'}`,
-                              value: `{{${nodeId}.${key}}}`
-                            }));
-                          } else {
-                            // Fallback if agent config not found
-                            suggestions = [
-                              { 
-                                label: 'Output', 
-                                description: 'The output from this agent',
-                                value: `{{${nodeId}}}`
-                              },
-                            ];
-                          }
-                        } else {
-                          // Fallback if agent ID not found
-                          suggestions = [
-                            { 
-                              label: 'Output', 
-                              description: 'The output from this agent',
-                              value: `{{${nodeId}}}`
-                            },
-                          ];
-                        }
-                      } else if (nodeType === 'trigger') {
-                        suggestions = [
-                          { 
-                            label: 'Comment ID', 
-                            description: 'The ID of the comment',
-                            value: `{{trigger_data.comment_id}}` 
-                          },
-                          { 
-                            label: 'Author', 
-                            description: 'The comment author name',
-                            value: `{{trigger_data.author}}` 
-                          },
-                          { 
-                            label: 'Content', 
-                            description: 'The comment text content',
-                            value: `{{trigger_data.content}}` 
-                          },
-                          { 
-                            label: 'Email', 
-                            description: 'The comment author email',
-                            value: `{{trigger_data.email}}` 
-                          },
-                        ];
+                      if (nodeType === 'agent' && item.outputs) {
+                        suggestions = Object.entries(item.outputs).map(([key, output]) => ({
+                          label: output.label || key,
+                          description: `Type: ${output.type || 'string'}`,
+                          value: `{{${nodeId}.${key}}}`
+                        }));
+                      } else if (nodeType === 'trigger' && item.outputs) {
+                        suggestions = Object.entries(item.outputs).map(([key, output]) => ({
+                          label: output.label || key,
+                          description: `Type: ${output.type || 'string'}`,
+                          value: `{{trigger_data.${key}}}`
+                        }));
+                      } else if (nodeType === 'action' && item.outputs) {
+                        suggestions = Object.entries(item.outputs).map(([key, output]) => ({
+                          label: output.label || key,
+                          description: `Type: ${output.type || 'string'}`,
+                          value: `{{${nodeId}.${key}}}`
+                        }));
                       } else {
-                        // For other node types, show generic output
                         suggestions = [
                           { 
                             label: 'Output', 
@@ -1144,10 +1357,10 @@ export default function NodeConfigPanel() {
                     
                     // Special handling for phone_number_variable - show variable selection UI
                     if (inputKey === 'phone_number_variable') {
-                      // Combine trigger nodes and connected source nodes
-                      const allSourceNodes = [...triggerNodes, ...connectedSourceNodes.filter(node => 
-                        !triggerNodes.some(trigger => trigger.id === node.id)
-                      )];
+                      // Use grouped parent nodes for variable suggestions
+                      const allTriggerNodes = triggerNodes.filter(node => 
+                        !connectedSourceNodes.some(connected => connected.id === node.id)
+                      );
                       
                       return (
                         <div key={inputKey}>
@@ -1156,117 +1369,121 @@ export default function NodeConfigPanel() {
                             {inputConfig.required && <span className="text-red-500 ml-1">*</span>}
                           </label>
                           
-                          {/* Show trigger nodes and connected nodes for variable suggestions */}
-                          {allSourceNodes.length > 0 && (
+                          {/* Show variable suggestions */}
+                          {(groupedParentNodes.length > 0 || individualParentNodes.length > 0 || allTriggerNodes.length > 0) && (
                             <div className="mb-3 p-3 bg-green-50 border border-green-200 rounded-md max-w-full overflow-hidden">
                               <p className="text-xs font-semibold text-green-900 mb-2 flex items-center gap-1">
                                 <span>✓</span> Available Variables - Click to insert:
                               </p>
                               <div className="space-y-2 max-h-64 overflow-y-auto overflow-x-hidden pr-1">
-                                {allSourceNodes.map((sourceNode) => {
+                                {/* Show combined variables for grouped nodes */}
+                                {groupedParentNodes.map((group, groupIdx) => {
+                                  if (!group.outputs) return null;
+                                  
+                                  const nodeTypeLabel = group.type.charAt(0).toUpperCase() + group.type.slice(1);
+                                  const nodeLabels = group.nodes.map(n => n.data.label || n.data.config?.title || 'Untitled Node').join(', ');
+                                  
+                                  return (
+                                    <div key={`group_${groupIdx}`} className="bg-white rounded p-2 border border-blue-200 max-w-full overflow-hidden">
+                                      <div className="flex items-center gap-2 mb-1 min-w-0">
+                                        <span className="text-xs font-semibold text-blue-900 truncate">
+                                          {nodeTypeLabel} Nodes ({group.nodes.length})
+                                        </span>
+                                        <span className="text-xs text-gray-500 flex-shrink-0">Combined</span>
+                                      </div>
+                                      <div className="text-xs text-gray-600 mb-2 truncate" title={nodeLabels}>
+                                        {nodeLabels}
+                                      </div>
+                                      <div className="space-y-1">
+                                        {Object.entries(group.outputs).map(([key, output]) => {
+                                          const combinedValue = `{{parents.${group.type}.${key}}}`;
+                                          return (
+                                            <button
+                                              key={key}
+                                              type="button"
+                                              onMouseDown={(e) => e.preventDefault()}
+                                              onClick={() => {
+                                                const inputField = document.querySelector(`input[data-input-key="${inputKey}"]`);
+                                                if (inputField) {
+                                                  const start = inputField.selectionStart || 0;
+                                                  const end = inputField.selectionEnd || 0;
+                                                  const currentValue = inputField.value || '';
+                                                  const newValue = currentValue.slice(0, start) + combinedValue + currentValue.slice(end);
+                                                  
+                                                  setConfig({
+                                                    ...config,
+                                                    inputs: {
+                                                      ...(config.inputs || {}),
+                                                      [inputKey]: newValue,
+                                                    },
+                                                  });
+                                                  
+                                                  setTimeout(() => {
+                                                    inputField.focus();
+                                                    const newPos = start + combinedValue.length;
+                                                    inputField.setSelectionRange(newPos, newPos);
+                                                  }, 0);
+                                                } else {
+                                                  setConfig({
+                                                    ...config,
+                                                    inputs: {
+                                                      ...(config.inputs || {}),
+                                                      [inputKey]: combinedValue,
+                                                    },
+                                                  });
+                                                }
+                                              }}
+                                              className="block w-full text-left p-1.5 rounded hover:bg-blue-50 transition-colors group min-w-0"
+                                              title={`Combined output from ${group.nodes.length} ${group.type} nodes. Type: ${output.type || 'string'}`}
+                                            >
+                                              <div className="flex items-center gap-2 min-w-0">
+                                                <span className="text-xs font-medium text-blue-700 group-hover:text-blue-900 truncate">
+                                                  {output.label || key}
+                                                </span>
+                                                <span className="text-xs text-gray-500 font-mono truncate" title={combinedValue}>
+                                                  {combinedValue}
+                                                </span>
+                                              </div>
+                                              <div className="text-xs text-gray-500 mt-0.5 truncate">
+                                                Combined from {group.nodes.length} nodes • Type: {output.type || 'string'}
+                                              </div>
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                                
+                                {/* Show individual nodes */}
+                                {individualParentNodes.map((item) => {
+                                  const sourceNode = item.node;
                                   const nodeId = sourceNode.id;
                                   const nodeType = sourceNode.data.nodeType;
                                   const nodeLabel = sourceNode.data.label || sourceNode.data.config?.title || 'Untitled Node';
                                   let suggestions = [];
                                   
-                                  if (nodeType === 'agent') {
-                                    // Get outputs from agent config
-                                    const agentId = sourceNode.data.config?.agent_id || sourceNode.data.agentId;
-                                    if (agentId) {
-                                      // Try both underscore and hyphen versions
-                                      const normalizedAgentId = agentId.replace(/-/g, '_');
-                                      const normalizedAgentIdHyphen = agentId.replace(/_/g, '-');
-                                      const agentConfig = agentConfigs[agentId] || agentConfigs[normalizedAgentId] || agentConfigs[normalizedAgentIdHyphen];
-                                      if (agentConfig && agentConfig.outputs) {
-                                        suggestions = Object.entries(agentConfig.outputs).map(([key, output]) => ({
-                                          label: output.label || key,
-                                          description: `Type: ${output.type || 'string'}`,
-                                          value: `{{${nodeId}.${key}}}`,
-                                          displayValue: `{{node.${key}}}`
-                                        }));
-                                      } else {
-                                        // Fallback if agent config not found
-                                        suggestions = [
-                                          { 
-                                            label: 'Output', 
-                                            description: 'The output from this agent',
-                                            value: `{{${nodeId}}}`,
-                                            displayValue: `{{node}}`
-                                          },
-                                        ];
-                                      }
-                                    } else {
-                                      // Fallback if agent ID not found
-                                      suggestions = [
-                                        { 
-                                          label: 'Output', 
-                                          description: 'The output from this agent',
-                                          value: `{{${nodeId}}}`,
-                                          displayValue: `{{node}}`
-                                        },
-                                      ];
-                                    }
-                                  } else if (nodeType === 'trigger') {
-                                    // Get outputs from trigger config
-                                    const triggerId = sourceNode.data.config?.trigger_type || sourceNode.data.triggerType;
-                                    if (triggerId && triggerConfigs[triggerId] && triggerConfigs[triggerId].outputs) {
-                                      suggestions = Object.entries(triggerConfigs[triggerId].outputs).map(([key, output]) => ({
-                                        label: output.label || key,
-                                        description: `Type: ${output.type || 'string'}`,
-                                        value: `{{trigger_data.${key}}}`
-                                      }));
-                                    } else {
-                                      // Fallback for common trigger outputs
-                                      suggestions = [
-                                        { 
-                                          label: 'Comment ID', 
-                                          description: 'The ID of the comment',
-                                          value: `{{trigger_data.comment_id}}` 
-                                        },
-                                        { 
-                                          label: 'Author', 
-                                          description: 'The comment author name',
-                                          value: `{{trigger_data.author}}` 
-                                        },
-                                        { 
-                                          label: 'Content', 
-                                          description: 'The comment text content',
-                                          value: `{{trigger_data.content}}` 
-                                        },
-                                        { 
-                                          label: 'Email', 
-                                          description: 'The comment author email',
-                                          value: `{{trigger_data.email}}` 
-                                        },
-                                      ];
-                                    }
-                                  } else if (nodeType === 'action') {
-                                    // Get outputs from tool config
-                                    const toolId = sourceNode.data.config?.tool_id || sourceNode.data.toolId;
-                                    if (toolId) {
-                                      const normalizedToolId = toolId.replace(/-/g, '_');
-                                      const normalizedToolIdHyphen = toolId.replace(/_/g, '-');
-                                      const toolConfig = toolConfigs[toolId] || toolConfigs[normalizedToolId] || toolConfigs[normalizedToolIdHyphen];
-                                      if (toolConfig && toolConfig.outputs) {
-                                        suggestions = Object.entries(toolConfig.outputs).map(([key, output]) => ({
-                                          label: output.label || key,
-                                          description: `Type: ${output.type || 'string'}`,
-                                          value: `{{${nodeId}.${key}}}`,
-                                          displayValue: `{{node.${key}}}`
-                                        }));
-                      }
-                    }
-                                  } else {
-                                    // For other node types, show generic output
-                                    suggestions = [
-                                      { 
-                                        label: 'Output', 
-                                        description: 'The output from this node',
-                                        value: `{{${nodeId}}}`,
-                                        displayValue: `{{node}}`
-                                      },
-                                    ];
+                                  if (nodeType === 'trigger' && item.outputs) {
+                                    suggestions = Object.entries(item.outputs).map(([key, output]) => ({
+                                      label: output.label || key,
+                                      description: `Type: ${output.type || 'string'}`,
+                                      value: `{{trigger_data.${key}}}`
+                                    }));
+                                  } else if (nodeType === 'action' && item.outputs) {
+                                    suggestions = Object.entries(item.outputs).map(([key, output]) => ({
+                                      label: output.label || key,
+                                      description: `Type: ${output.type || 'string'}`,
+                                      value: `{{${nodeId}.${key}}}`
+                                    }));
+                                  } else if (nodeType === 'agent' && item.outputs) {
+                                    suggestions = Object.entries(item.outputs).map(([key, output]) => ({
+                                      label: output.label || key,
+                                      description: `Type: ${output.type || 'string'}`,
+                                      value: `{{${nodeId}.${key}}}`
+                                    }));
                                   }
+                                  
+                                  if (suggestions.length === 0) return null;
                                   
                                   return (
                                     <div key={nodeId} className="bg-white rounded p-2 border border-green-100 max-w-full overflow-hidden">
@@ -1279,8 +1496,8 @@ export default function NodeConfigPanel() {
                                           <button
                                             key={idx}
                                             type="button"
+                                            onMouseDown={(e) => e.preventDefault()}
                                             onClick={() => {
-                                              // Find the input field for this inputKey
                                               const inputField = document.querySelector(`input[data-input-key="${inputKey}"]`);
                                               if (inputField) {
                                                 const start = inputField.selectionStart || 0;
@@ -1296,14 +1513,12 @@ export default function NodeConfigPanel() {
                                                   },
                                                 });
                                                 
-                                                // Set cursor position after inserted text
                                                 setTimeout(() => {
                                                   inputField.focus();
                                                   const newPos = start + suggestion.value.length;
                                                   inputField.setSelectionRange(newPos, newPos);
                                                 }, 0);
                                               } else {
-                                                // Fallback: just set the value
                                                 setConfig({
                                                   ...config,
                                                   inputs: {
@@ -1320,11 +1535,85 @@ export default function NodeConfigPanel() {
                                               <span className="text-xs font-medium text-blue-700 group-hover:text-blue-900 truncate">
                                                 {suggestion.label}
                                               </span>
-                                              <span 
-                                                className="text-xs text-gray-500 font-mono truncate"
-                                                title={suggestion.value}
-                                              >
-                                                {suggestion.displayValue || suggestion.value}
+                                              <span className="text-xs text-gray-500 font-mono truncate" title={suggestion.value}>
+                                                {suggestion.value}
+                                              </span>
+                                            </div>
+                                            <div className="text-xs text-gray-500 mt-0.5 truncate">
+                                              {suggestion.description}
+                                            </div>
+                                          </button>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                                
+                                {/* Show trigger nodes that aren't connected */}
+                                {allTriggerNodes.map((sourceNode) => {
+                                  const triggerId = sourceNode.data.config?.trigger_type || sourceNode.data.triggerType;
+                                  if (!triggerId || !triggerConfigs[triggerId]?.outputs) return null;
+                                  
+                                  const suggestions = Object.entries(triggerConfigs[triggerId].outputs).map(([key, output]) => ({
+                                    label: output.label || key,
+                                    description: `Type: ${output.type || 'string'}`,
+                                    value: `{{trigger_data.${key}}}`
+                                  }));
+                                  
+                                  return (
+                                    <div key={sourceNode.id} className="bg-white rounded p-2 border border-green-100 max-w-full overflow-hidden">
+                                      <div className="flex items-center gap-2 mb-1 min-w-0">
+                                        <span className="text-xs font-semibold text-green-900 truncate">
+                                          {sourceNode.data.label || sourceNode.data.config?.title || 'Untitled Node'}
+                                        </span>
+                                        <span className="text-xs text-gray-500 flex-shrink-0">(trigger)</span>
+                                      </div>
+                                      <div className="space-y-1">
+                                        {suggestions.map((suggestion, idx) => (
+                                          <button
+                                            key={idx}
+                                            type="button"
+                                            onMouseDown={(e) => e.preventDefault()}
+                                            onClick={() => {
+                                              const inputField = document.querySelector(`input[data-input-key="${inputKey}"]`);
+                                              if (inputField) {
+                                                const start = inputField.selectionStart || 0;
+                                                const end = inputField.selectionEnd || 0;
+                                                const currentValue = inputField.value || '';
+                                                const newValue = currentValue.slice(0, start) + suggestion.value + currentValue.slice(end);
+                                                
+                                                setConfig({
+                                                  ...config,
+                                                  inputs: {
+                                                    ...(config.inputs || {}),
+                                                    [inputKey]: newValue,
+                                                  },
+                                                });
+                                                
+                                                setTimeout(() => {
+                                                  inputField.focus();
+                                                  const newPos = start + suggestion.value.length;
+                                                  inputField.setSelectionRange(newPos, newPos);
+                                                }, 0);
+                                              } else {
+                                                setConfig({
+                                                  ...config,
+                                                  inputs: {
+                                                    ...(config.inputs || {}),
+                                                    [inputKey]: suggestion.value,
+                                                  },
+                                                });
+                                              }
+                                            }}
+                                            className="block w-full text-left p-1.5 rounded hover:bg-blue-50 transition-colors group min-w-0"
+                                            title={suggestion.description}
+                                          >
+                                            <div className="flex items-center gap-2 min-w-0">
+                                              <span className="text-xs font-medium text-blue-700 group-hover:text-blue-900 truncate">
+                                                {suggestion.label}
+                                              </span>
+                                              <span className="text-xs text-gray-500 font-mono truncate" title={suggestion.value}>
+                                                {suggestion.value}
                                               </span>
                                             </div>
                                             <div className="text-xs text-gray-500 mt-0.5 truncate">
@@ -1472,10 +1761,10 @@ export default function NodeConfigPanel() {
                   
                   // Special handling for message field - make it a larger textarea with variable suggestions
                   if (inputKey === 'message' || inputKey === 'body_text') {
-                    // Combine trigger nodes and connected source nodes for variable suggestions
-                    const allSourceNodes = [...triggerNodes, ...connectedSourceNodes.filter(node => 
-                      !triggerNodes.some(trigger => trigger.id === node.id)
-                    )];
+                    // Use grouped parent nodes for variable suggestions
+                    const allTriggerNodes = triggerNodes.filter(node => 
+                      !connectedSourceNodes.some(connected => connected.id === node.id)
+                    );
                     
                     return (
                       <div key={inputKey}>
@@ -1485,75 +1774,113 @@ export default function NodeConfigPanel() {
                         </label>
                         
                         {/* Show variable suggestions */}
-                        {allSourceNodes.length > 0 && (
+                        {(groupedParentNodes.length > 0 || individualParentNodes.length > 0 || allTriggerNodes.length > 0) && (
                           <div className="mb-3 p-3 bg-green-50 border border-green-200 rounded-md max-w-full overflow-hidden">
                             <p className="text-xs font-semibold text-green-900 mb-2 flex items-center gap-1">
                               <span>✓</span> Available Variables - Click to insert:
                             </p>
                             <div className="space-y-2 max-h-64 overflow-y-auto overflow-x-hidden pr-1">
-                              {allSourceNodes.map((sourceNode) => {
+                              {/* Show combined variables for grouped nodes */}
+                              {groupedParentNodes.map((group, groupIdx) => {
+                                if (!group.outputs) return null;
+                                
+                                const nodeTypeLabel = group.type.charAt(0).toUpperCase() + group.type.slice(1);
+                                const nodeLabels = group.nodes.map(n => n.data.label || n.data.config?.title || 'Untitled Node').join(', ');
+                                
+                                return (
+                                  <div key={`group_${groupIdx}`} className="bg-white rounded p-2 border border-blue-200 max-w-full overflow-hidden">
+                                    <div className="flex items-center gap-2 mb-1 min-w-0">
+                                      <span className="text-xs font-semibold text-blue-900 truncate">
+                                        {nodeTypeLabel} Nodes ({group.nodes.length})
+                                      </span>
+                                      <span className="text-xs text-gray-500 flex-shrink-0">Combined</span>
+                                    </div>
+                                    <div className="text-xs text-gray-600 mb-2 truncate" title={nodeLabels}>
+                                      {nodeLabels}
+                                    </div>
+                                    <div className="space-y-1">
+                                      {Object.entries(group.outputs).map(([key, output]) => {
+                                        const combinedValue = `{{parents.${group.type}.${key}}}`;
+                                        return (
+                                          <button
+                                            key={key}
+                                            type="button"
+                                            onMouseDown={(e) => e.preventDefault()}
+                                            onClick={() => {
+                                              const textarea = lastFocusedTextareaRef.current;
+                                              const storedInputKey = lastFocusedTextareaInputKeyRef.current;
+                                              
+                                              if (textarea && storedInputKey === inputKey) {
+                                                const start = textarea.selectionStart || 0;
+                                                const end = textarea.selectionEnd || 0;
+                                                const currentValue = textarea.value || '';
+                                                const newValue = currentValue.slice(0, start) + combinedValue + currentValue.slice(end);
+                                                
+                                                setConfig({
+                                                  ...config,
+                                                  inputs: {
+                                                    ...(config.inputs || {}),
+                                                    [inputKey]: newValue,
+                                                  },
+                                                });
+                                                
+                                                setTimeout(() => {
+                                                  if (textarea) {
+                                                    textarea.focus();
+                                                    const newPos = start + combinedValue.length;
+                                                    textarea.setSelectionRange(newPos, newPos);
+                                                  }
+                                                }, 0);
+                                              }
+                                            }}
+                                            className="block w-full text-left p-1.5 rounded hover:bg-blue-50 transition-colors group min-w-0"
+                                            title={`Combined output from ${group.nodes.length} ${group.type} nodes. Type: ${output.type || 'string'}`}
+                                          >
+                                            <div className="flex items-center gap-2 min-w-0">
+                                              <span className="text-xs font-medium text-blue-700 group-hover:text-blue-900 truncate">
+                                                {output.label || key}
+                                              </span>
+                                              <span className="text-xs text-gray-500 font-mono truncate" title={combinedValue}>
+                                                {combinedValue}
+                                              </span>
+                                            </div>
+                                            <div className="text-xs text-gray-500 mt-0.5 truncate">
+                                              Combined from {group.nodes.length} nodes • Type: {output.type || 'string'}
+                                            </div>
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                              
+                              {/* Show individual nodes */}
+                              {individualParentNodes.map((item) => {
+                                const sourceNode = item.node;
                                 const nodeId = sourceNode.id;
                                 const nodeType = sourceNode.data.nodeType;
                                 const nodeLabel = sourceNode.data.label || sourceNode.data.config?.title || 'Untitled Node';
                                 let suggestions = [];
                                 
-                                if (nodeType === 'trigger') {
-                                  const triggerId = sourceNode.data.config?.trigger_type || sourceNode.data.triggerType;
-                                  if (triggerId && triggerConfigs[triggerId] && triggerConfigs[triggerId].outputs) {
-                                    suggestions = Object.entries(triggerConfigs[triggerId].outputs).map(([key, output]) => ({
-                                      label: output.label || key,
-                                      description: `Type: ${output.type || 'string'}`,
-                                      value: `{{trigger_data.${key}}}`
-                                    }));
-                                  }
-                                } else if (nodeType === 'action') {
-                                  const toolId = sourceNode.data.config?.tool_id || sourceNode.data.toolId;
-                                  if (toolId) {
-                                    const normalizedToolId = toolId.replace(/-/g, '_');
-                                    const normalizedToolIdHyphen = toolId.replace(/_/g, '-');
-                                    const toolConfig = toolConfigs[toolId] || toolConfigs[normalizedToolId] || toolConfigs[normalizedToolIdHyphen];
-                                    if (toolConfig && toolConfig.outputs) {
-                                      suggestions = Object.entries(toolConfig.outputs).map(([key, output]) => ({
-                                        label: output.label || key,
-                                        description: `Type: ${output.type || 'string'}`,
-                                        value: `{{${nodeId}.${key}}}`
-                                      }));
-                                    }
-                                  }
-                                } else if (nodeType === 'agent') {
-                                  // Get outputs from agent config
-                                  const agentId = sourceNode.data.config?.agent_id || sourceNode.data.agentId;
-                                  if (agentId) {
-                                    // Try both underscore and hyphen versions
-                                    const normalizedAgentId = agentId.replace(/-/g, '_');
-                                    const normalizedAgentIdHyphen = agentId.replace(/_/g, '-');
-                                    const agentConfig = agentConfigs[agentId] || agentConfigs[normalizedAgentId] || agentConfigs[normalizedAgentIdHyphen];
-                                    if (agentConfig && agentConfig.outputs) {
-                                      suggestions = Object.entries(agentConfig.outputs).map(([key, output]) => ({
-                                        label: output.label || key,
-                                        description: `Type: ${output.type || 'string'}`,
-                                        value: `{{${nodeId}.${key}}}`
-                                      }));
-                                    } else {
-                                      // Fallback if agent config not found
-                                      suggestions = [
-                                        { 
-                                          label: 'Output', 
-                                          description: 'The output from this agent',
-                                          value: `{{${nodeId}}}`
-                                        },
-                                      ];
-                                    }
-                                  } else {
-                                    // Fallback if agent ID not found
-                                    suggestions = [
-                                      { 
-                                        label: 'Output', 
-                                        description: 'The output from this agent',
-                                        value: `{{${nodeId}}}`
-                                      },
-                                    ];
-                                  }
+                                if (nodeType === 'trigger' && item.outputs) {
+                                  suggestions = Object.entries(item.outputs).map(([key, output]) => ({
+                                    label: output.label || key,
+                                    description: `Type: ${output.type || 'string'}`,
+                                    value: `{{trigger_data.${key}}}`
+                                  }));
+                                } else if (nodeType === 'action' && item.outputs) {
+                                  suggestions = Object.entries(item.outputs).map(([key, output]) => ({
+                                    label: output.label || key,
+                                    description: `Type: ${output.type || 'string'}`,
+                                    value: `{{${nodeId}.${key}}}`
+                                  }));
+                                } else if (nodeType === 'agent' && item.outputs) {
+                                  suggestions = Object.entries(item.outputs).map(([key, output]) => ({
+                                    label: output.label || key,
+                                    description: `Type: ${output.type || 'string'}`,
+                                    value: `{{${nodeId}.${key}}}`
+                                  }));
                                 }
                                 
                                 if (suggestions.length === 0) return null;
@@ -1569,12 +1896,8 @@ export default function NodeConfigPanel() {
                                         <button
                                           key={idx}
                                           type="button"
-                                          onMouseDown={(e) => {
-                                            // Prevent button from taking focus
-                                            e.preventDefault();
-                                          }}
+                                          onMouseDown={(e) => e.preventDefault()}
                                           onClick={() => {
-                                            // Use the stored last focused textarea
                                             const textarea = lastFocusedTextareaRef.current;
                                             const storedInputKey = lastFocusedTextareaInputKeyRef.current;
                                             
@@ -1592,7 +1915,6 @@ export default function NodeConfigPanel() {
                                                 },
                                               });
                                               
-                                              // Set cursor position after inserted text
                                               setTimeout(() => {
                                                 if (textarea) {
                                                   textarea.focus();
@@ -1609,10 +1931,80 @@ export default function NodeConfigPanel() {
                                             <span className="text-xs font-medium text-blue-700 group-hover:text-blue-900 truncate">
                                               {suggestion.label}
                                             </span>
-                                            <span 
-                                              className="text-xs text-gray-500 font-mono truncate"
-                                              title={suggestion.value}
-                                            >
+                                            <span className="text-xs text-gray-500 font-mono truncate" title={suggestion.value}>
+                                              {suggestion.value}
+                                            </span>
+                                          </div>
+                                          <div className="text-xs text-gray-500 mt-0.5 truncate">
+                                            {suggestion.description}
+                                          </div>
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                              
+                              {/* Show trigger nodes that aren't connected */}
+                              {allTriggerNodes.map((sourceNode) => {
+                                const triggerId = sourceNode.data.config?.trigger_type || sourceNode.data.triggerType;
+                                if (!triggerId || !triggerConfigs[triggerId]?.outputs) return null;
+                                
+                                const suggestions = Object.entries(triggerConfigs[triggerId].outputs).map(([key, output]) => ({
+                                  label: output.label || key,
+                                  description: `Type: ${output.type || 'string'}`,
+                                  value: `{{trigger_data.${key}}}`
+                                }));
+                                
+                                return (
+                                  <div key={sourceNode.id} className="bg-white rounded p-2 border border-green-100 max-w-full overflow-hidden">
+                                    <div className="flex items-center gap-2 mb-1 min-w-0">
+                                      <span className="text-xs font-semibold text-green-900 truncate">
+                                        {sourceNode.data.label || sourceNode.data.config?.title || 'Untitled Node'}
+                                      </span>
+                                      <span className="text-xs text-gray-500 flex-shrink-0">(trigger)</span>
+                                    </div>
+                                    <div className="space-y-1">
+                                      {suggestions.map((suggestion, idx) => (
+                                        <button
+                                          key={idx}
+                                          type="button"
+                                          onMouseDown={(e) => e.preventDefault()}
+                                          onClick={() => {
+                                            const textarea = lastFocusedTextareaRef.current;
+                                            const storedInputKey = lastFocusedTextareaInputKeyRef.current;
+                                            
+                                            if (textarea && storedInputKey === inputKey) {
+                                              const start = textarea.selectionStart || 0;
+                                              const end = textarea.selectionEnd || 0;
+                                              const currentValue = textarea.value || '';
+                                              const newValue = currentValue.slice(0, start) + suggestion.value + currentValue.slice(end);
+                                              
+                                              setConfig({
+                                                ...config,
+                                                inputs: {
+                                                  ...(config.inputs || {}),
+                                                  [inputKey]: newValue,
+                                                },
+                                              });
+                                              
+                                              setTimeout(() => {
+                                                if (textarea) {
+                                                  textarea.focus();
+                                                  const newPos = start + suggestion.value.length;
+                                                  textarea.setSelectionRange(newPos, newPos);
+                                                }
+                                              }, 0);
+                                            }
+                                          }}
+                                          className="block w-full text-left p-1.5 rounded hover:bg-blue-50 transition-colors group min-w-0"
+                                          title={suggestion.description}
+                                        >
+                                          <div className="flex items-center gap-2 min-w-0">
+                                            <span className="text-xs font-medium text-blue-700 group-hover:text-blue-900 truncate">
+                                              {suggestion.label}
+                                            </span>
+                                            <span className="text-xs text-gray-500 font-mono truncate" title={suggestion.value}>
                                               {suggestion.value}
                                             </span>
                                           </div>
@@ -1688,10 +2080,10 @@ export default function NodeConfigPanel() {
                         });
                       });
                       
-                      // Combine trigger nodes and connected source nodes for variable suggestions
-                      const allSourceNodes = [...triggerNodes, ...connectedSourceNodes.filter(node => 
-                        !triggerNodes.some(trigger => trigger.id === node.id)
-                      )];
+                      // Use grouped parent nodes for variable suggestions
+                      const allTriggerNodes = triggerNodes.filter(node => 
+                        !connectedSourceNodes.some(connected => connected.id === node.id)
+                      );
                       
                       return (
                         <div key={inputKey}>
@@ -1701,64 +2093,126 @@ export default function NodeConfigPanel() {
                           </label>
                           
                           {/* Show variable suggestions */}
-                          {allSourceNodes.length > 0 && (
+                          {(groupedParentNodes.length > 0 || individualParentNodes.length > 0 || allTriggerNodes.length > 0) && (
                             <div className="mb-3 p-3 bg-green-50 border border-green-200 rounded-md max-w-full overflow-hidden">
                               <p className="text-xs font-semibold text-green-900 mb-2 flex items-center gap-1">
                                 <span>✓</span> Available Variables - Click to insert:
                               </p>
                               <div className="space-y-2 max-h-64 overflow-y-auto overflow-x-hidden pr-1">
-                                {allSourceNodes.map((sourceNode) => {
+                                {/* Show combined variables for grouped nodes */}
+                                {groupedParentNodes.map((group, groupIdx) => {
+                                  if (!group.outputs) return null;
+                                  
+                                  const nodeTypeLabel = group.type.charAt(0).toUpperCase() + group.type.slice(1);
+                                  const nodeLabels = group.nodes.map(n => n.data.label || n.data.config?.title || 'Untitled Node').join(', ');
+                                  
+                                  return (
+                                    <div key={`group_${groupIdx}`} className="bg-white rounded p-2 border border-blue-200 max-w-full overflow-hidden">
+                                      <div className="flex items-center gap-2 mb-1 min-w-0">
+                                        <span className="text-xs font-semibold text-blue-900 truncate">
+                                          {nodeTypeLabel} Nodes ({group.nodes.length})
+                                        </span>
+                                        <span className="text-xs text-gray-500 flex-shrink-0">Combined</span>
+                                      </div>
+                                      <div className="text-xs text-gray-600 mb-2 truncate" title={nodeLabels}>
+                                        {nodeLabels}
+                                      </div>
+                                      <div className="text-gray-600 mt-1 space-y-0.5">
+                                        {Object.entries(group.outputs).map(([key, output]) => {
+                                          const combinedValue = `{{parents.${group.type}.${key}}}`;
+                                          return (
+                                            <button
+                                              key={key}
+                                              type="button"
+                                              onMouseDown={(e) => e.preventDefault()}
+                                              onClick={() => {
+                                                const targetInput = lastFocusedInputRef.current;
+                                                const inputInfo = lastFocusedInputInfoRef.current;
+                                                
+                                                if (targetInput && inputInfo.index !== null && inputInfo.inputKey === inputKey) {
+                                                  const start = targetInput.selectionStart || 0;
+                                                  const end = targetInput.selectionEnd || 0;
+                                                  const currentValue = targetInput.value || '';
+                                                  const newValue = currentValue.slice(0, start) + combinedValue + currentValue.slice(end);
+                                                  
+                                                  const newPairs = [...keyValuePairs];
+                                                  const oldPair = newPairs[inputInfo.index];
+                                                  
+                                                  if (inputInfo.isKey) {
+                                                    newPairs[inputInfo.index] = { ...oldPair, key: newValue };
+                                                  } else {
+                                                    newPairs[inputInfo.index] = { ...oldPair, value: newValue };
+                                                  }
+                                                  
+                                                  const newObject = {};
+                                                  const pairsMeta = {};
+                                                  
+                                                  newPairs.forEach((p) => {
+                                                    if (p.key && p.key.trim() !== '') {
+                                                      newObject[p.key] = p.value || '';
+                                                      pairsMeta[p.key] = p.id;
+                                                    } else {
+                                                      const tempKey = `__empty_${p.id}`;
+                                                      newObject[tempKey] = p.value || '';
+                                                      pairsMeta[tempKey] = p.id;
+                                                    }
+                                                  });
+                                                  
+                                                  newObject.__pairs_meta__ = pairsMeta;
+                                                  
+                                                  setConfig({
+                                                    ...config,
+                                                    inputs: {
+                                                      ...(config.inputs || {}),
+                                                      [inputKey]: newObject,
+                                                    },
+                                                  });
+                                                  
+                                                  setTimeout(() => {
+                                                    if (targetInput) {
+                                                      targetInput.focus();
+                                                      const newPos = start + combinedValue.length;
+                                                      targetInput.setSelectionRange(newPos, newPos);
+                                                    }
+                                                  }, 0);
+                                                }
+                                              }}
+                                              className="block w-full text-left p-1.5 rounded hover:bg-blue-50 transition-colors group cursor-pointer"
+                                              title={`Combined output from ${group.nodes.length} ${group.type} nodes`}
+                                            >
+                                              <span className="font-mono text-xs text-blue-700 group-hover:text-blue-900">{combinedValue}</span>
+                                              <span className="text-xs text-gray-500 ml-2">{output.label || key}</span>
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                                
+                                {/* Show individual nodes */}
+                                {individualParentNodes.map((item) => {
+                                  const sourceNode = item.node;
                                   const nodeId = sourceNode.id;
                                   const nodeType = sourceNode.data.nodeType;
                                   const nodeLabel = sourceNode.data.label || sourceNode.data.config?.title || 'Untitled Node';
                                   
                                   let suggestions = [];
-                                  if (nodeType === 'trigger') {
-                                    const triggerId = sourceNode.data.config?.trigger_type || sourceNode.data.triggerType;
-                                    if (triggerId && triggerConfigs[triggerId] && triggerConfigs[triggerId].outputs) {
-                                      suggestions = Object.entries(triggerConfigs[triggerId].outputs).map(([key, output]) => ({
-                                        label: output.label || key,
-                                        value: `{{trigger_data.${key}}}`
-                                      }));
-                                    }
-                                  } else if (nodeType === 'action') {
-                                    const toolId = sourceNode.data.config?.tool_id || sourceNode.data.toolId;
-                                    if (toolId) {
-                                      const normalizedToolId = toolId.replace(/-/g, '_');
-                                      const normalizedToolIdHyphen = toolId.replace(/_/g, '-');
-                                      const toolConfig = toolConfigs[toolId] || toolConfigs[normalizedToolId] || toolConfigs[normalizedToolIdHyphen];
-                                      if (toolConfig && toolConfig.outputs) {
-                                        suggestions = Object.entries(toolConfig.outputs).map(([key, output]) => ({
-                                          label: output.label || key,
-                                          value: `{{${nodeId}.${key}}}`
-                                        }));
-                                      }
-                                    }
-                                  } else if (nodeType === 'agent') {
-                                    // Get outputs from agent config
-                                    const agentId = sourceNode.data.config?.agent_id || sourceNode.data.agentId;
-                                    if (agentId) {
-                                      // Try both underscore and hyphen versions
-                                      const normalizedAgentId = agentId.replace(/-/g, '_');
-                                      const normalizedAgentIdHyphen = agentId.replace(/_/g, '-');
-                                      const agentConfig = agentConfigs[agentId] || agentConfigs[normalizedAgentId] || agentConfigs[normalizedAgentIdHyphen];
-                                      if (agentConfig && agentConfig.outputs) {
-                                        suggestions = Object.entries(agentConfig.outputs).map(([key, output]) => ({
-                                          label: output.label || key,
-                                          value: `{{${nodeId}.${key}}}`
-                                        }));
-                                      } else {
-                                        // Fallback if agent config not found
-                                        suggestions = [
-                                          { label: 'Output', value: `{{${nodeId}}}` },
-                                        ];
-                                      }
-                                    } else {
-                                      // Fallback if agent ID not found
-                                      suggestions = [
-                                        { label: 'Output', value: `{{${nodeId}}}` },
-                                      ];
-                                    }
+                                  if (nodeType === 'trigger' && item.outputs) {
+                                    suggestions = Object.entries(item.outputs).map(([key, output]) => ({
+                                      label: output.label || key,
+                                      value: `{{trigger_data.${key}}}`
+                                    }));
+                                  } else if (nodeType === 'action' && item.outputs) {
+                                    suggestions = Object.entries(item.outputs).map(([key, output]) => ({
+                                      label: output.label || key,
+                                      value: `{{${nodeId}.${key}}}`
+                                    }));
+                                  } else if (nodeType === 'agent' && item.outputs) {
+                                    suggestions = Object.entries(item.outputs).map(([key, output]) => ({
+                                      label: output.label || key,
+                                      value: `{{${nodeId}.${key}}}`
+                                    }));
                                   }
                                   
                                   if (suggestions.length === 0) return null;
@@ -1771,16 +2225,11 @@ export default function NodeConfigPanel() {
                                           <button
                                             key={idx}
                                             type="button"
-                                            onMouseDown={(e) => {
-                                              // Prevent button from taking focus
-                                              e.preventDefault();
-                                            }}
+                                            onMouseDown={(e) => e.preventDefault()}
                                             onClick={() => {
-                                              // Use the stored last focused input info
                                               const targetInput = lastFocusedInputRef.current;
                                               const inputInfo = lastFocusedInputInfoRef.current;
                                               
-                                              // Only proceed if this input key matches
                                               if (targetInput && inputInfo.index !== null && inputInfo.inputKey === inputKey) {
                                                 const start = targetInput.selectionStart || 0;
                                                 const end = targetInput.selectionEnd || 0;
@@ -1796,7 +2245,6 @@ export default function NodeConfigPanel() {
                                                   newPairs[inputInfo.index] = { ...oldPair, value: newValue };
                                                 }
                                                 
-                                                // Convert back to object with stable IDs
                                                 const newObject = {};
                                                 const pairsMeta = {};
                                                 
@@ -1821,7 +2269,91 @@ export default function NodeConfigPanel() {
                                                   },
                                                 });
                                                 
-                                                // Set cursor position after inserted text
+                                                setTimeout(() => {
+                                                  if (targetInput) {
+                                                    targetInput.focus();
+                                                    const newPos = start + s.value.length;
+                                                    targetInput.setSelectionRange(newPos, newPos);
+                                                  }
+                                                }, 0);
+                                              }
+                                            }}
+                                            className="block w-full text-left p-1.5 rounded hover:bg-blue-50 transition-colors group cursor-pointer"
+                                            title={`Click to insert ${s.value} at cursor position`}
+                                          >
+                                            <span className="font-mono text-xs text-blue-700 group-hover:text-blue-900">{s.value}</span>
+                                            <span className="text-xs text-gray-500 ml-2">{s.label}</span>
+                                          </button>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                                
+                                {/* Show trigger nodes that aren't connected */}
+                                {allTriggerNodes.map((sourceNode) => {
+                                  const triggerId = sourceNode.data.config?.trigger_type || sourceNode.data.triggerType;
+                                  if (!triggerId || !triggerConfigs[triggerId]?.outputs) return null;
+                                  
+                                  const suggestions = Object.entries(triggerConfigs[triggerId].outputs).map(([key, output]) => ({
+                                    label: output.label || key,
+                                    value: `{{trigger_data.${key}}}`
+                                  }));
+                                  
+                                  return (
+                                    <div key={sourceNode.id} className="bg-white rounded p-2 border border-green-100 text-xs">
+                                      <div className="font-semibold text-green-900 truncate">
+                                        {sourceNode.data.label || sourceNode.data.config?.title || 'Untitled Node'}
+                                      </div>
+                                      <div className="text-gray-600 mt-1 space-y-0.5">
+                                        {suggestions.map((s, idx) => (
+                                          <button
+                                            key={idx}
+                                            type="button"
+                                            onMouseDown={(e) => e.preventDefault()}
+                                            onClick={() => {
+                                              const targetInput = lastFocusedInputRef.current;
+                                              const inputInfo = lastFocusedInputInfoRef.current;
+                                              
+                                              if (targetInput && inputInfo.index !== null && inputInfo.inputKey === inputKey) {
+                                                const start = targetInput.selectionStart || 0;
+                                                const end = targetInput.selectionEnd || 0;
+                                                const currentValue = targetInput.value || '';
+                                                const newValue = currentValue.slice(0, start) + s.value + currentValue.slice(end);
+                                                
+                                                const newPairs = [...keyValuePairs];
+                                                const oldPair = newPairs[inputInfo.index];
+                                                
+                                                if (inputInfo.isKey) {
+                                                  newPairs[inputInfo.index] = { ...oldPair, key: newValue };
+                                                } else {
+                                                  newPairs[inputInfo.index] = { ...oldPair, value: newValue };
+                                                }
+                                                
+                                                const newObject = {};
+                                                const pairsMeta = {};
+                                                
+                                                newPairs.forEach((p) => {
+                                                  if (p.key && p.key.trim() !== '') {
+                                                    newObject[p.key] = p.value || '';
+                                                    pairsMeta[p.key] = p.id;
+                                                  } else {
+                                                    const tempKey = `__empty_${p.id}`;
+                                                    newObject[tempKey] = p.value || '';
+                                                    pairsMeta[tempKey] = p.id;
+                                                  }
+                                                });
+                                                
+                                                newObject.__pairs_meta__ = pairsMeta;
+                                                
+                                                setConfig({
+                                                  ...config,
+                                                  inputs: {
+                                                    ...(config.inputs || {}),
+                                                    [inputKey]: newObject,
+                                                  },
+                                                });
+                                                
                                                 setTimeout(() => {
                                                   if (targetInput) {
                                                     targetInput.focus();

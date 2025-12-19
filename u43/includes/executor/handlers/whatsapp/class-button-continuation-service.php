@@ -76,31 +76,49 @@ class Button_Continuation_Service {
         // Reconstruct context from execution logs
         $context = ['trigger_data' => $execution->trigger_data ?? []];
         
+        // Build execution graph first (need nodes for type metadata)
+        $nodes = $workflow->workflow_data['nodes'] ?? [];
+        $edges = $workflow->workflow_data['edges'] ?? [];
+        
         // Get node logs to reconstruct context
         $node_logs = $flow_manager->get_node_logs($mapping->execution_id);
+        $context['_node_types'] = []; // Initialize node types metadata for parent variable resolution
+        
         foreach ($node_logs as $log) {
             if ($log->output_data) {
                 // get_node_logs() already decodes JSON, so output_data is already an array
                 $output = is_array($log->output_data) ? $log->output_data : json_decode($log->output_data, true);
                 if ($output) {
                     $context[$log->node_id] = $output;
+                    // Store node type metadata for parent variable resolution
+                    $log_node = self::find_node_by_id($nodes, $log->node_id);
+                    if ($log_node) {
+                        $context['_node_types'][$log->node_id] = $log_node['type'] ?? 'action';
+                    }
                 }
             }
         }
         
         // Update button message node output with button details for routing
-        $context[$mapping->node_id] = array_merge(
+        // Add button_id as both a field name and as a direct field for variable resolution
+        $button_title = $button_data['button_title'] ?? $button_id;
+        $button_output = array_merge(
             $context[$mapping->node_id] ?? [],
             [
                 'button_id' => $button_id,
-                'button_title' => $button_data['button_title'] ?? '',
+                'button_title' => $button_title,
                 'interactive_type' => $button_data['interactive_type'] ?? 'button_reply',
+                // Add button ID as a field with button title as value so {{parents.action.btn1}} resolves to "Dhaka"
+                // This allows combined parent variables to work with button outputs
+                $button_id => $button_title, // e.g., 'btn1' => 'Dhaka'
             ]
         );
+        $context[$mapping->node_id] = $button_output;
         
-        // Build execution graph
-        $nodes = $workflow->workflow_data['nodes'] ?? [];
-        $edges = $workflow->workflow_data['edges'] ?? [];
+        // Ensure button message node type is set in metadata
+        if (!isset($context['_node_types'][$mapping->node_id])) {
+            $context['_node_types'][$mapping->node_id] = 'action';
+        }
         
         // Set execution context on executor
         $executor->set_execution_context($mapping->execution_id, $mapping->workflow_id);

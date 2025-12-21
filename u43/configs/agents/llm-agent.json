@@ -1,7 +1,7 @@
 {
-  "id": "llm_chat_agent",
-  "name": "LLM Chat Agent",
-  "description": "Chat with Large Language Models like ChatGPT and DeepSeek",
+  "id": "llm_agent",
+  "name": "LLM Agent",
+  "description": "Chat with or make decisions using Large Language Models",
   "version": "1.0.0",
   "category": "ai",
   "icon": "message-circle",
@@ -23,6 +23,12 @@
       "required": false,
       "label": "System Prompt",
       "description": "Optional system prompt to set the assistant's behavior"
+    },
+    "context": {
+      "type": "object",
+      "required": false,
+      "label": "Context",
+      "description": "Additional context for decision-making (used in decision mode)"
     }
   },
   "outputs": {
@@ -30,21 +36,19 @@
       "type": "string",
       "label": "Response"
     },
-    "model_used": {
+    "reason": {
       "type": "string",
-      "label": "Model Used"
-    },
-    "tokens_used": {
-      "type": "number",
-      "label": "Tokens Used"
+      "label": "Reason",
+      "description": "Reasoning for the decision (only in decision mode)"
     }
   },
-  "handler": "U43\\Agents\\Built_In\\LLM_Chat_Agent\\LLM_Chat_Agent",
+  "handler": "U43\\Agents\\Built_In\\LLM_Agent\\LLM_Agent",
   "settings": {
     "provider": "openai",
-    "model": "gpt-5",
+    "model": "gpt-5.2",
     "temperature": 0.7,
-    "system_prompt": "You are a helpful assistant."
+    "system_prompt": "You are a helpful assistant.",
+    "mode": "chat"
   }
 }
 

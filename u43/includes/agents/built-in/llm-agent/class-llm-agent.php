@@ -1,16 +1,16 @@
 <?php
 /**
- * LLM Decision Agent
+ * LLM Agent (Unified Chat and Decision Agent)
  *
  * @package U43
  */
 
-namespace U43\Agents\Built_In\LLM_Decision_Agent;
+namespace U43\Agents\Built_In\LLM_Agent;
 
 use U43\Agents\Agent_Base;
 use U43\LLM\Providers\OpenAI\OpenAI_Provider;
 
-class LLM_Decision_Agent extends Agent_Base {
+class LLM_Agent extends Agent_Base {
     
     protected $llm_provider;
     
@@ -40,7 +40,126 @@ class LLM_Decision_Agent extends Agent_Base {
      * @return array
      */
     public function execute($inputs) {
-        $prompt = $inputs['prompt'] ?? '';
+        // Get mode from config (default: 'chat')
+        $mode = $this->config['settings']['mode'] ?? 'chat';
+        
+        if ($mode === 'decision') {
+            return $this->execute_decision_mode($inputs);
+        } else {
+            return $this->execute_chat_mode($inputs);
+        }
+    }
+    
+    /**
+     * Execute in chat mode
+     *
+     * @param array $inputs Input parameters
+     * @return array
+     */
+    private function execute_chat_mode($inputs) {
+        $message = $inputs['message'] ?? '';
+        $conversation_history = $inputs['conversation_history'] ?? [];
+        $system_prompt = $inputs['system_prompt'] ?? null;
+        
+        // Build messages for LLM
+        $messages = [];
+        
+        // Add system prompt if provided (from inputs or config)
+        $system_content = $system_prompt ?? $this->config['settings']['system_prompt'] ?? 'You are a helpful assistant.';
+        if (!empty($system_content)) {
+            $messages[] = [
+                'role' => 'system',
+                'content' => $system_content
+            ];
+        }
+        
+        // Add conversation history if provided
+        if (!empty($conversation_history) && is_array($conversation_history)) {
+            foreach ($conversation_history as $history_item) {
+                // Ensure each history item has role and content
+                if (isset($history_item['role']) && isset($history_item['content'])) {
+                    $messages[] = [
+                        'role' => $history_item['role'],
+                        'content' => $history_item['content']
+                    ];
+                }
+            }
+        }
+        
+        // Add current user message
+        if (!empty($message)) {
+            $messages[] = [
+                'role' => 'user',
+                'content' => $message
+            ];
+        }
+        
+        // Ensure we have at least one message
+        if (empty($messages)) {
+            return [
+                'response' => 'Error: No message provided.',
+                'model_used' => $this->config['settings']['model'] ?? 'gpt-5.2',
+                'tokens_used' => 0,
+                'error' => 'No message provided',
+            ];
+        }
+        
+        // Call LLM with timeout
+        try {
+            // Set a timeout for the LLM call (30 seconds)
+            $timeout = 30;
+            $start_time = microtime(true);
+            
+            // Get model from config, ensuring we use default if empty or old model
+            $model = $this->config['settings']['model'] ?? 'gpt-5.2';
+            // If model is empty or is the old default, use the new default
+            if (empty($model) || $model === 'gpt-3.5-turbo') {
+                $model = 'gpt-5.2';
+            }
+            
+            $response = $this->llm_provider->chat($messages, [
+                'model' => $model,
+                'temperature' => $this->config['settings']['temperature'] ?? 0.7,
+                'timeout' => $timeout,
+            ]);
+            
+            $elapsed = microtime(true) - $start_time;
+            if ($elapsed > $timeout) {
+                throw new \Exception("LLM API call timed out after {$timeout} seconds");
+            }
+            
+            // Check if response is valid
+            if (!isset($response['response'])) {
+                throw new \Exception("Invalid response from LLM provider: missing 'response' field");
+            }
+            
+        } catch (\Exception $e) {
+            error_log("U43: LLM Chat API call failed: " . $e->getMessage());
+            // Return error response
+            return [
+                'response' => 'Error: ' . $e->getMessage(),
+                'model_used' => $model ?? 'gpt-5.2',
+                'tokens_used' => 0,
+                'error' => $e->getMessage(),
+            ];
+        }
+        
+        return [
+            'response' => $response['response'] ?? '',
+            'model_used' => $response['model_used'] ?? ($model ?? 'gpt-5.2'),
+            'tokens_used' => $response['tokens_used'] ?? 0,
+        ];
+    }
+    
+    /**
+     * Execute in decision mode
+     *
+     * @param array $inputs Input parameters
+     * @return array
+     */
+    private function execute_decision_mode($inputs) {
+        // Support both 'message' and 'prompt' for backward compatibility
+        $prompt = $inputs['message'] ?? $inputs['prompt'] ?? '';
         $context = $inputs['context'] ?? [];
         
         // Get decision options from inputs (passed from executor) or config
@@ -80,11 +199,18 @@ class LLM_Decision_Agent extends Agent_Base {
             $timeout = 30;
             $start_time = microtime(true);
             
-        $response = $this->llm_provider->chat($messages, [
-            'model' => $this->config['settings']['model'] ?? 'gpt-3.5-turbo',
-            'temperature' => $this->config['settings']['temperature'] ?? 0.7,
+            // Get model from config, ensuring we use default if empty or old model
+            $model = $this->config['settings']['model'] ?? 'gpt-5.2';
+            // If model is empty or is the old default, use the new default
+            if (empty($model) || $model === 'gpt-3.5-turbo') {
+                $model = 'gpt-5.2';
+            }
+            
+            $response = $this->llm_provider->chat($messages, [
+                'model' => $model,
+                'temperature' => $this->config['settings']['temperature'] ?? 0.7,
                 'timeout' => $timeout,
-        ]);
+            ]);
             
             $elapsed = microtime(true) - $start_time;
             if ($elapsed > $timeout) {
@@ -97,12 +223,12 @@ class LLM_Decision_Agent extends Agent_Base {
             }
             
         } catch (\Exception $e) {
-            error_log("U43: LLM API call failed: " . $e->getMessage());
+            error_log("U43: LLM Decision API call failed: " . $e->getMessage());
             // Return a default decision on error
             return [
-                'decision' => 'maybe',
-                'reasoning' => 'Error: ' . $e->getMessage() . '. Defaulting to maybe (needs review).',
-                'model_used' => $this->config['settings']['model'] ?? 'gpt-3.5-turbo',
+                'response' => 'maybe',
+                'reason' => 'Error: ' . $e->getMessage() . '. Defaulting to maybe (needs review).',
+                'model_used' => $model ?? 'gpt-5.2',
                 'tokens_used' => 0,
                 'error' => $e->getMessage(),
             ];
@@ -116,10 +242,11 @@ class LLM_Decision_Agent extends Agent_Base {
             $decision_data = $this->parse_decision_from_text($response['response'], $decision_options);
         }
         
+        // Map decision/reasoning to response/reason
         return [
-            'decision' => $decision_data['decision'] ?? 'maybe',
-            'reasoning' => $decision_data['reasoning'] ?? $response['response'],
-            'model_used' => $response['model_used'] ?? ($this->config['settings']['model'] ?? 'gpt-3.5-turbo'),
+            'response' => $decision_data['decision'] ?? 'maybe',
+            'reason' => $decision_data['reasoning'] ?? $response['response'],
+            'model_used' => $response['model_used'] ?? ($model ?? 'gpt-5.2'),
             'tokens_used' => $response['tokens_used'] ?? 0,
         ];
     }
@@ -168,4 +295,5 @@ class LLM_Decision_Agent extends Agent_Base {
         return [];
     }
 }
+
 

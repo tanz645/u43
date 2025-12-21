@@ -56,9 +56,20 @@ export const useWorkflowStore = create((set, get) => ({
         config.trigger_type = node.trigger_type;
       }
       
-      // For agent nodes, ensure settings are preserved
+      // For agent nodes, ensure settings are preserved and upgrade old models
       if (node.type === 'agent' && node.config?.settings) {
-        config.settings = node.config.settings;
+        config.settings = { ...node.config.settings };
+        // Upgrade old default model to new default
+        if (!config.settings.model || config.settings.model === 'gpt-3.5-turbo' || config.settings.model === 'gpt-5') {
+          config.settings.model = 'gpt-5.2';
+        }
+      } else if (node.type === 'agent') {
+        // If no settings exist, set defaults
+        config.settings = {
+          provider: 'openai',
+          model: 'gpt-5.2',
+          temperature: 0.7,
+        };
       }
       
       return {
@@ -180,7 +191,7 @@ export const useWorkflowStore = create((set, get) => ({
         // Default settings will be loaded from agent config file
         config.settings = {
           provider: 'openai',
-          model: 'gpt-3.5-turbo',
+          model: 'gpt-5.2',
           temperature: 0.7,
         };
       }
@@ -288,6 +299,10 @@ export const useWorkflowStore = create((set, get) => ({
               data: { 
                 ...node.data, 
                 ...data,
+                // Deep merge config if both exist
+                config: data.config 
+                  ? { ...node.data.config, ...data.config }
+                  : (data.config !== undefined ? data.config : node.data.config),
                 // Update label if title is provided
                 label: data.label || data.config?.title || node.data.label,
               } 

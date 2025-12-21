@@ -36,11 +36,26 @@
   border-radius: 50%;
   border: 2px solid #d1d5db;
   background: white;
+  position: absolute !important;
+  pointer-events: all !important;
+  z-index: 1000 !important;
+}
+
+.react-flow__node .react-flow__handle {
+  position: absolute !important;
 }
 
 .react-flow__handle:hover {
   border-color: #3b82f6;
   transform: scale(1.2);
+}
+
+.react-flow__handle-right {
+  right: -6px;
+}
+
+.react-flow__handle-left {
+  left: -6px;
 }
 
 .react-flow__edge-path {

@@ -1254,13 +1254,14 @@ class REST_API {
             return new \WP_Error('invalid_response', 'Invalid response from OpenAI API', ['status' => 500]);
         }
         
-        // Filter and format models - only include GPT-5 models
+        // Filter and format models - only include gpt-5.2 and gpt-5.2-chat-latest
         // Reference: https://platform.openai.com/docs/guides/latest-model
+        $allowed_models = ['gpt-5.2', 'gpt-5.2-chat-latest'];
         $chat_models = [];
         foreach ($body['data'] as $model) {
             $model_id = $model['id'] ?? '';
-            // Only include GPT-5 models (gpt-5, gpt-5.1, gpt-5.2, etc.)
-            if (preg_match('/^gpt-5/', $model_id) && strpos($model_id, 'instruct') === false) {
+            // Only include the two allowed models
+            if (in_array($model_id, $allowed_models)) {
                 $chat_models[] = [
                     'id' => $model_id,
                     'name' => $model_id,
@@ -1269,22 +1270,14 @@ class REST_API {
             }
         }
         
-        // Sort models: newer GPT-5 versions first (gpt-5.2 > gpt-5.1 > gpt-5), then alphabetical
+        // Sort models: gpt-5.2 first, then gpt-5.2-chat-latest
         usort($chat_models, function($a, $b) {
             $a_id = $a['id'];
             $b_id = $b['id'];
             
-            // Extract version numbers for comparison (e.g., gpt-5.2 -> 5.2, gpt-5 -> 5.0)
-            preg_match('/^gpt-5(?:\.(\d+))?/', $a_id, $a_match);
-            preg_match('/^gpt-5(?:\.(\d+))?/', $b_id, $b_match);
-            
-            $a_version = isset($a_match[1]) ? (float)$a_match[1] : 0.0;
-            $b_version = isset($b_match[1]) ? (float)$b_match[1] : 0.0;
-            
-            // Higher versions first
-            if ($a_version !== $b_version) {
-                return $b_version <=> $a_version;
-            }
+            // gpt-5.2 comes first
+            if ($a_id === 'gpt-5.2') return -1;
+            if ($b_id === 'gpt-5.2') return 1;
             
             // Otherwise alphabetical
             return strcmp($a_id, $b_id);
@@ -1292,7 +1285,7 @@ class REST_API {
         
         return new \WP_REST_Response([
             'models' => $chat_models,
-            'default_model' => !empty($chat_models) ? $chat_models[0]['id'] : 'gpt-5'
+            'default_model' => !empty($chat_models) ? $chat_models[0]['id'] : 'gpt-5.2'
         ], 200);
     }
     
@@ -1305,22 +1298,12 @@ class REST_API {
     private function get_model_description($model_id) {
         $descriptions = [
             'gpt-5.2' => 'GPT-5.2 - Latest GPT-5 model',
-            'gpt-5.1' => 'GPT-5.1 - Advanced GPT-5 model',
-            'gpt-5' => 'GPT-5 - Latest generation model',
+            'gpt-5.2-chat-latest' => 'GPT-5.2 Chat Latest - Latest chat-optimized GPT-5.2 model',
         ];
         
         // Check exact match first
         if (isset($descriptions[$model_id])) {
             return $descriptions[$model_id];
-        }
-        
-        // Check prefix matches for GPT-5 models
-        if (preg_match('/^gpt-5\.(\d+)/', $model_id, $matches)) {
-            $version = $matches[1];
-            return "GPT-5.{$version} - GPT-5 model version {$version}";
-        }
-        if (strpos($model_id, 'gpt-5') === 0) {
-            return 'GPT-5 - Latest generation model';
         }
         
         return 'OpenAI GPT-5 Model';

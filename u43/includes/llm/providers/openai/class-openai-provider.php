@@ -49,7 +49,7 @@ class OpenAI_Provider extends LLM_Provider_Base {
      * @throws \Exception
      */
     public function chat($messages, $options = []) {
-        $model = $options['model'] ?? $this->config['settings']['default_model'] ?? 'gpt-5';
+        $model = $options['model'] ?? $this->config['settings']['default_model'] ?? 'gpt-5.2';
         $temperature = $options['temperature'] ?? $this->config['settings']['default_temperature'] ?? 0.7;
         $max_tokens = $options['max_tokens'] ?? $this->config['settings']['default_max_tokens'] ?? 1000;
         

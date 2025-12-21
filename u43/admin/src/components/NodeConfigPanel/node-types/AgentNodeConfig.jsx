@@ -16,13 +16,78 @@ export default function AgentNodeConfig({
   loadingModels,
   groupedSuggestions,
   individualSuggestions,
-  triggerSuggestions
+  triggerSuggestions,
+  selectedNode,
+  updateNode
 }) {
   const [showVariableInfo, setShowVariableInfo] = useState(false);
   const promptTextareaRef = useRef(null);
+  
+  // Get mode from config (default: 'chat')
+  const mode = config.settings?.mode || 'chat';
+  const isDecisionMode = mode === 'decision';
+  
+  // Toggle between chat and decision mode
+  const handleModeToggle = (e) => {
+    const newMode = e.target.checked ? 'decision' : 'chat';
+    const newConfig = {
+      ...config,
+      settings: {
+        ...config.settings,
+        mode: newMode
+      }
+    };
+    
+    // Update local config state
+    setConfig(newConfig);
+    
+    // Immediately update the node so outputs change in real-time
+    if (selectedNode && selectedNode.id && updateNode) {
+      // Ensure we preserve all existing config properties
+      const currentConfig = selectedNode.data?.config || {};
+      const mergedConfig = {
+        ...currentConfig,
+        ...newConfig,
+        settings: {
+          ...currentConfig.settings,
+          ...newConfig.settings,
+        }
+      };
+      updateNode(selectedNode.id, { config: mergedConfig });
+    }
+  };
 
   return (
     <div className="space-y-4">
+      {/* Mode Toggle */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Agent Mode
+        </label>
+        <div className="flex items-center gap-3">
+          <span className={`text-sm ${!isDecisionMode ? 'font-semibold text-blue-600' : 'text-gray-500'}`}>
+            Chat Agent
+          </span>
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={isDecisionMode}
+              onChange={handleModeToggle}
+              className="sr-only peer"
+            />
+            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+          </label>
+          <span className={`text-sm ${isDecisionMode ? 'font-semibold text-blue-600' : 'text-gray-500'}`}>
+            Decision Agent
+          </span>
+        </div>
+        <p className="text-xs text-gray-500 mt-1">
+          {isDecisionMode 
+            ? 'Decision mode analyzes information and makes decisions with reasoning.'
+            : 'Chat mode provides conversational responses.'}
+        </p>
+      </div>
+      
       {/* Model Selection */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -34,7 +99,7 @@ export default function AgentNodeConfig({
           </div>
         ) : openaiModels.length > 0 ? (
           <select
-            value={config.settings?.model || (openaiModels[0]?.id || 'gpt-5')}
+            value={config.settings?.model || (openaiModels[0]?.id || 'gpt-5.2')}
             onChange={(e) => {
               setConfig({
                 ...config,
@@ -56,7 +121,7 @@ export default function AgentNodeConfig({
         ) : (
           <div className="px-3 py-2 border border-gray-300 rounded-md bg-gray-50">
             <span className="text-sm text-gray-500">
-              {config.settings?.model || 'gpt-5'} (API key not configured or GPT-5 models unavailable)
+              {config.settings?.model || 'gpt-5.2'} (API key not configured or GPT-5 models unavailable)
             </span>
           </div>
         )}
@@ -139,21 +204,24 @@ export default function AgentNodeConfig({
         )}
       </div>
       
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          Custom Decision Options (Optional)
-        </label>
-        <input
-          type="text"
-          value={config.custom_decisions || ''}
-          onChange={(e) => setConfig({ ...config, custom_decisions: e.target.value })}
-          placeholder="e.g., accept, reject, pending (comma-separated)"
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-        <p className="text-xs text-gray-500 mt-1">
-          Default options: yes, no, maybe. Add custom options separated by commas.
-        </p>
-      </div>
+      {/* Custom Decision Options - Only show in decision mode */}
+      {isDecisionMode && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Custom Decision Options (Optional)
+          </label>
+          <input
+            type="text"
+            value={config.custom_decisions || ''}
+            onChange={(e) => setConfig({ ...config, custom_decisions: e.target.value })}
+            placeholder="e.g., accept, reject, pending (comma-separated)"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <p className="text-xs text-gray-500 mt-1">
+            Default options: yes, no, maybe. Add custom options separated by commas.
+          </p>
+        </div>
+      )}
     </div>
   );
 }

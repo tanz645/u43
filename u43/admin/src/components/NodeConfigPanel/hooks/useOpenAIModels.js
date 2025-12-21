@@ -35,9 +35,10 @@ export function useOpenAIModels() {
             // If currentConfig was provided, use it for the check; otherwise use prevConfig
             const configToCheck = currentConfig || prevConfig;
             
-            // Only set default if model is not already set
-            if (!configToCheck.settings?.model) {
-              const defaultModel = data.default_model || data.models[0].id;
+            // Only set default if model is not already set, or upgrade old models
+            const currentModel = configToCheck.settings?.model;
+            if (!currentModel || currentModel === 'gpt-3.5-turbo' || currentModel === 'gpt-5') {
+              const defaultModel = data.default_model || 'gpt-5.2' || data.models[0]?.id || 'gpt-5.2';
               return {
                 ...prevConfig,
                 settings: {

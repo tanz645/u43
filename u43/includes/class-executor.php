@@ -257,15 +257,19 @@ class Executor {
                         $timeout = 60;
                         $start_time = microtime(true);
                         
-                        // Map 'prompt' to 'message' for LLM chat agent
-                        // LLM chat agent expects 'message' input, but executor uses 'prompt'
-                        if ($agent_id === 'llm_chat_agent' && isset($inputs['prompt'])) {
+                        // Map 'prompt' to 'message' for unified LLM agent
+                        // Unified LLM agent supports both 'prompt' and 'message' inputs
+                        if ($agent_id === 'llm_agent' && isset($inputs['prompt'])) {
                             $inputs['message'] = $inputs['prompt'];
                             // Keep prompt for backward compatibility, but message takes precedence
                         }
                         
                         // Add decision options to inputs so agent can include them in the message
-                        $inputs['decision_options'] = $decision_options;
+                        // Only add if agent is in decision mode
+                        $agent_mode = $node_config['settings']['mode'] ?? null;
+                        if ($agent_id === 'llm_agent' && $agent_mode === 'decision') {
+                            $inputs['decision_options'] = $decision_options;
+                        }
                         
                         $output = $this->agents_registry->execute($agent_id, $inputs, $node_config);
                         

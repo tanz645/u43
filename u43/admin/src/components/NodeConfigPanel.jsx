@@ -158,6 +158,8 @@ export default function NodeConfigPanel() {
             groupedSuggestions={groupedSuggestions}
             individualSuggestions={individualSuggestions}
             triggerSuggestions={triggerSuggestions}
+            selectedNode={selectedNode}
+            updateNode={updateNode}
           />
         )}
         

@@ -42,6 +42,24 @@ export const getNodeOutputs = (node, configs = {}) => {
       const { withUnderscores, withHyphens } = normalizeId(agentId);
       const agentConfig = agentConfigs[agentId] || agentConfigs[withUnderscores] || agentConfigs[withHyphens];
       if (agentConfig?.outputs) {
+        // For unified LLM agent, filter outputs based on mode
+        if (agentId === 'llm_agent' || withUnderscores === 'llm_agent' || withHyphens === 'llm-agent') {
+          const mode = node.data.config?.settings?.mode || 'chat';
+          const allOutputs = agentConfig.outputs;
+          
+          // Always exclude model_used and tokens_used
+          const filteredOutputs = { ...allOutputs };
+          delete filteredOutputs.model_used;
+          delete filteredOutputs.tokens_used;
+          
+          // In chat mode, also exclude 'reason' output
+          if (mode === 'chat') {
+            delete filteredOutputs.reason;
+          }
+          
+          return filteredOutputs;
+        }
+        
         return agentConfig.outputs;
       }
     }

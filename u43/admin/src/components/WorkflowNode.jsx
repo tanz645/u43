@@ -1,4 +1,4 @@
-import { Handle, Position } from 'reactflow';
+import { Handle, Position, useUpdateNodeInternals } from 'reactflow';
 import { useState, useEffect, useMemo } from 'react';
 import { useWorkflowStore } from '../store/workflowStore';
 import { renderIcon, iconMap } from './Icons';
@@ -7,6 +7,7 @@ import { renderIcon, iconMap } from './Icons';
  * Custom Workflow Node Component
  */
 export default function WorkflowNode({ id, data, selected }) {
+  const updateNodeInternals = useUpdateNodeInternals();
   // Safely get nodeType with fallback
   const nodeType = data?.nodeType || 'action';
   const { updateNode, deleteNode, duplicateNode, selectNode, toolConfigs, triggerConfigs, agentConfigs } = useWorkflowStore();
@@ -134,6 +135,24 @@ export default function WorkflowNode({ id, data, selected }) {
         const normalizedAgentIdHyphen = agentId.replace(/_/g, '-');
         const agentConfig = agentConfigs[agentId] || agentConfigs[normalizedAgentId] || agentConfigs[normalizedAgentIdHyphen];
         if (agentConfig && agentConfig.outputs) {
+          // For unified LLM agent, filter outputs based on mode
+          if (agentId === 'llm_agent' || normalizedAgentId === 'llm_agent' || normalizedAgentIdHyphen === 'llm-agent') {
+            const mode = data.config?.settings?.mode || 'chat';
+            const allOutputs = agentConfig.outputs;
+            
+            // Always exclude model_used and tokens_used
+            const filteredOutputs = { ...allOutputs };
+            delete filteredOutputs.model_used;
+            delete filteredOutputs.tokens_used;
+            
+            // In chat mode, also exclude 'reason' output
+            if (mode === 'chat') {
+              delete filteredOutputs.reason;
+            }
+            
+            return filteredOutputs;
+          }
+          
           return agentConfig.outputs;
         }
       }
@@ -180,39 +199,40 @@ export default function WorkflowNode({ id, data, selected }) {
     }
     
     return {};
-  }, [nodeType, data.config, data.triggerType, data.agentId, data.toolId, data.config?.inputs?.buttons, triggerConfigs, agentConfigs, toolConfigs]);
+  }, [nodeType, data.config, data.config?.settings?.mode, data.triggerType, data.agentId, data.toolId, data.config?.inputs?.buttons, triggerConfigs, agentConfigs, toolConfigs]);
   
   const hasOutputs = Object.keys(nodeOutputs).length > 0;
   
+  // Force React Flow to recalculate handle positions when outputs change
+  useEffect(() => {
+    // Use setTimeout to ensure the DOM has updated with new handles
+    const timer = setTimeout(() => {
+      if (updateNodeInternals && id) {
+        updateNodeInternals(id);
+      }
+    }, 50);
+    
+    return () => clearTimeout(timer);
+  }, [id, nodeOutputs, data.config?.settings?.mode, updateNodeInternals]);
+  
   // Color mapping for different output types - returns both Tailwind class and hex color
   const getOutputColor = (outputKey) => {
-    const colorMap = {
-      'decision': { class: 'bg-blue-500', hex: '#3b82f6' },
-      'reasoning': { class: 'bg-amber-500', hex: '#f59e0b' },
-      'response': { class: 'bg-blue-500', hex: '#3b82f6' },
-      'tokens_used': { class: 'bg-orange-500', hex: '#f97316' },
-      'model_used': { class: 'bg-indigo-500', hex: '#6366f1' },
-      'true': { class: 'bg-green-500', hex: '#10b981' },
-      'false': { class: 'bg-red-500', hex: '#ef4444' },
-    };
-    
-    // Default colors for other outputs
-    const defaultColors = [
-      { class: 'bg-purple-500', hex: '#8b5cf6' },
-      { class: 'bg-pink-500', hex: '#ec4899' },
-      { class: 'bg-indigo-500', hex: '#6366f1' },
-      { class: 'bg-teal-500', hex: '#14b8a6' },
-      { class: 'bg-cyan-500', hex: '#06b6d4' },
-    ];
-    
-    if (colorMap[outputKey]) {
-      return colorMap[outputKey];
+    // For unified LLM agent in decision mode, use different colors for response and reason
+    if (nodeType === 'agent') {
+      const agentId = data.config?.agent_id || data.agentId;
+      const mode = data.config?.settings?.mode || 'chat';
+      
+      if ((agentId === 'llm_agent' || agentId?.replace(/-/g, '_') === 'llm_agent' || agentId?.replace(/_/g, '-') === 'llm-agent') && mode === 'decision') {
+        if (outputKey === 'response') {
+          return { class: 'bg-blue-500', hex: '#3b82f6' };
+        } else if (outputKey === 'reason') {
+          return { class: 'bg-amber-500', hex: '#f59e0b' };
+        }
+      }
     }
     
-    // Use a default color based on index if not in map
-    const outputKeys = Object.keys(nodeOutputs || {});
-    const index = outputKeys.indexOf(outputKey);
-    return defaultColors[index % defaultColors.length] || { class: 'bg-gray-500', hex: '#6b7280' };
+    // Default color for all other outputs
+    return { class: 'bg-blue-500', hex: '#3b82f6' };
   };
   
   // Debug logging - log immediately when component renders
@@ -234,6 +254,7 @@ export default function WorkflowNode({ id, data, selected }) {
     <div 
       className={`workflow-node ${nodeType} ${selected ? 'selected' : ''}`}
       onClick={handleNodeClick}
+      style={{ position: 'relative', overflow: 'visible', minHeight: '60px' }}
     >
       {/* Input Handle */}
       {nodeType !== 'trigger' && (
@@ -328,28 +349,6 @@ export default function WorkflowNode({ id, data, selected }) {
           <div className="mt-2 pt-2 border-t border-gray-200">
             <div className="text-xs text-gray-500">
               <span className="font-medium">Model:</span> {data.config.settings.model}
-            </div>
-          </div>
-        )}
-        {/* Show output color legend for agent nodes with multiple outputs */}
-        {nodeType === 'agent' && hasOutputs && Object.keys(nodeOutputs).length > 1 && (
-          <div className="mt-2 pt-2 border-t border-gray-200">
-            <div className="text-xs font-medium text-gray-700 mb-1.5">Output Colors:</div>
-            <div className="space-y-1">
-              {Object.entries(nodeOutputs).map(([outputKey, output]) => {
-                const colorInfo = getOutputColor(outputKey);
-                return (
-                  <div key={outputKey} className="flex items-center gap-2">
-                    <div 
-                      className="w-3 h-3 rounded-full border border-white flex-shrink-0" 
-                      style={{ backgroundColor: colorInfo.hex }}
-                    />
-                    <span className="text-xs text-gray-600">
-                      {output.label || outputKey}
-                    </span>
-                  </div>
-                );
-              })}
             </div>
           </div>
         )}
@@ -465,7 +464,7 @@ export default function WorkflowNode({ id, data, selected }) {
             id="true"
             position={Position.Right}
             className="!bg-green-500 !border-white"
-            style={{ top: '30%' }}
+            style={{ top: '30%', right: '-6px', left: 'auto', transform: 'none' }}
             label="True"
           />
           <Handle
@@ -473,7 +472,7 @@ export default function WorkflowNode({ id, data, selected }) {
             id="false"
             position={Position.Right}
             className="!bg-red-500 !border-white"
-            style={{ top: '70%' }}
+            style={{ top: '70%', right: '-6px', left: 'auto', transform: 'none' }}
             label="False"
           />
         </>
@@ -482,7 +481,17 @@ export default function WorkflowNode({ id, data, selected }) {
           {Object.entries(nodeOutputs).map(([outputKey, output], index, arr) => {
             // Calculate position: distribute handles evenly along the right side
             const totalOutputs = arr.length;
-            const topPercentage = totalOutputs === 1 ? '50%' : `${30 + (index * (40 / (totalOutputs - 1)))}%`;
+            // Better positioning: center for single output, evenly spaced for multiple
+            let topPercentage;
+            if (totalOutputs === 1) {
+              topPercentage = '50%';
+            } else if (totalOutputs === 2) {
+              // For 2 outputs (response and reason in decision mode), position at 35% and 65%
+              topPercentage = index === 0 ? '35%' : '65%';
+            } else {
+              // For 3+ outputs, distribute evenly between 25% and 75%
+              topPercentage = `${25 + (index * (50 / (totalOutputs - 1)))}%`;
+            }
             const colorInfo = getOutputColor(outputKey);
             
             return (
@@ -491,10 +500,18 @@ export default function WorkflowNode({ id, data, selected }) {
                 type="source"
                 id={outputKey}
                 position={Position.Right}
-                className="!border-white"
+                className="!border-white !cursor-crosshair"
                 style={{ 
                   top: topPercentage,
-                  backgroundColor: colorInfo.hex 
+                  backgroundColor: colorInfo.hex,
+                  width: '12px',
+                  height: '12px',
+                  zIndex: 1000,
+                  border: '2px solid white',
+                  pointerEvents: 'all',
+                  left: 'auto',
+                  right: '-6px',
+                  transform: 'none'
                 }}
                 label={output.label || outputKey}
               />

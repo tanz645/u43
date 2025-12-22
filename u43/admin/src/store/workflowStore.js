@@ -15,7 +15,7 @@ const hasMultipleOutputs = (node, configs) => {
   
   const nodeType = node.data?.nodeType;
   
-  // Condition nodes always have 2 outputs (true/false)
+  // Condition nodes always have 2 outputs (yes/no)
   if (nodeType === 'condition') {
     return true;
   }
@@ -54,8 +54,8 @@ const getEdgeLabel = (sourceNode, sourceHandle, configs) => {
   // Handle condition nodes directly (they have hardcoded outputs)
   if (nodeType === 'condition') {
     const conditionOutputs = {
-      'true': { type: 'boolean', label: 'True' },
-      'false': { type: 'boolean', label: 'False' },
+      'true': { type: 'boolean', label: 'Yes' },
+      'false': { type: 'boolean', label: 'No' },
     };
     const output = conditionOutputs[sourceHandle];
     return output ? output.label : null;

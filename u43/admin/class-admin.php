@@ -363,6 +363,43 @@ class Admin {
      * Render executions and logs
      */
     public function render_executions() {
+        // Handle manual cleanup trigger
+        if (isset($_POST['u43_manual_cleanup']) && check_admin_referer('u43_manual_cleanup')) {
+            $result = \U43\Log_Cleanup::manual_cleanup();
+            set_transient('u43_last_cleanup_result', $result, 300);
+            
+            if ($result['success']) {
+                echo '<div class="notice notice-success is-dismissible"><p>' . esc_html($result['message']) . '</p></div>';
+            } else {
+                echo '<div class="notice notice-error is-dismissible"><p>' . esc_html($result['message']) . '</p></div>';
+            }
+        }
+        
+        // Handle log retention settings
+        if (isset($_POST['u43_save_log_retention']) && check_admin_referer('u43_log_retention')) {
+            $enabled = isset($_POST['log_retention_enabled']) ? (bool) $_POST['log_retention_enabled'] : false;
+            $duration = isset($_POST['log_retention_duration']) ? intval($_POST['log_retention_duration']) : 7;
+            $unit = isset($_POST['log_retention_unit']) ? sanitize_text_field($_POST['log_retention_unit']) : 'day';
+            
+            // Validate unit
+            if (!in_array($unit, ['minute', 'hour', 'day'])) {
+                $unit = 'day';
+            }
+            
+            // Validate duration
+            if ($duration < 1) {
+                $duration = 1;
+            }
+            
+            \U43\Log_Cleanup::update_settings([
+                'enabled' => $enabled,
+                'duration' => $duration,
+                'unit' => $unit,
+            ]);
+            
+            echo '<div class="notice notice-success"><p>' . esc_html__('Log retention settings saved!', 'u43') . '</p></div>';
+        }
+        
         include U43_PLUGIN_DIR . 'admin/views/executions.php';
     }
     

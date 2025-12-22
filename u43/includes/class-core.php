@@ -15,6 +15,7 @@ use U43\Executor;
 use U43\Database\Database;
 use U43\Admin\Admin;
 use U43\API\REST_API;
+use U43\Log_Cleanup;
 
 class Core {
     
@@ -89,6 +90,13 @@ class Core {
             new \U43\Campaigns\Campaign_Processor();
         } catch (\Exception $e) {
             error_log('U43: Error initializing campaign processor - ' . $e->getMessage());
+        }
+        
+        // Initialize log cleanup
+        try {
+            Log_Cleanup::init();
+        } catch (\Exception $e) {
+            error_log('U43: Error initializing log cleanup - ' . $e->getMessage());
         }
         
         // Hook into WordPress

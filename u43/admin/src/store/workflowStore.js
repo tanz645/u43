@@ -1,5 +1,76 @@
 import { create } from 'zustand';
 import { addEdge, applyNodeChanges, applyEdgeChanges } from 'reactflow';
+import { getNodeOutputs } from '../components/NodeConfigPanel/utils/nodeOutputs';
+
+/**
+ * Helper function to check if a node has multiple outputs
+ * Works generically for any node type including condition nodes and future node types
+ * 
+ * @param {Object} node - The node object
+ * @param {Object} configs - Configs object with toolConfigs, triggerConfigs, agentConfigs
+ * @returns {boolean} True if node has multiple outputs
+ */
+const hasMultipleOutputs = (node, configs) => {
+  if (!node) return false;
+  
+  const nodeType = node.data?.nodeType;
+  
+  // Condition nodes always have 2 outputs (true/false)
+  if (nodeType === 'condition') {
+    return true;
+  }
+  
+  // For all other node types, check outputs using getNodeOutputs
+  const outputs = getNodeOutputs(node, configs);
+  return outputs && Object.keys(outputs).length > 1;
+};
+
+/**
+ * Helper function to get edge label from source node and handle
+ * 
+ * This function is designed to work automatically for any node type that defines outputs.
+ * It will work for:
+ * - Condition nodes (hardcoded outputs)
+ * - Trigger/Agent/Action nodes (from config files)
+ * - Future node types with static outputs (from config files)
+ * - Future node types with dynamic outputs (from node.data.config.outputs or node.data.outputs)
+ * 
+ * **Dynamic Outputs Support:**
+ * When a node's configuration changes and outputs are updated dynamically (e.g., in node.data.config.outputs),
+ * the edge labels will automatically update because:
+ * 1. getNodeOutputs checks node.data.config.outputs FIRST (before config files)
+ * 2. updateNode() automatically updates edge labels when node config changes
+ * 
+ * @param {Object} sourceNode - The source node
+ * @param {string} sourceHandle - The source handle ID (output field name)
+ * @param {Object} configs - Configs object with toolConfigs, triggerConfigs, agentConfigs
+ * @returns {string|null} Label string or null
+ */
+const getEdgeLabel = (sourceNode, sourceHandle, configs) => {
+  if (!sourceNode || !sourceHandle) return null;
+  
+  const nodeType = sourceNode.data?.nodeType;
+  
+  // Handle condition nodes directly (they have hardcoded outputs)
+  if (nodeType === 'condition') {
+    const conditionOutputs = {
+      'true': { type: 'boolean', label: 'True' },
+      'false': { type: 'boolean', label: 'False' },
+    };
+    const output = conditionOutputs[sourceHandle];
+    return output ? output.label : null;
+  }
+  
+  // Get outputs for all other node types (including future node types with dynamic outputs)
+  // getNodeOutputs will check node.data.config.outputs FIRST (for dynamic outputs),
+  // then fall back to config files (for static outputs)
+  const outputs = getNodeOutputs(sourceNode, configs);
+  if (!outputs || !outputs[sourceHandle]) return null;
+  
+  // Return the label from the output config, or fallback to the handle ID
+  const output = outputs[sourceHandle];
+  return output.label || sourceHandle;
+};
 
 /**
  * Workflow Store using Zustand
@@ -84,16 +155,40 @@ export const useWorkflowStore = create((set, get) => ({
       };
     });
     
-    // Convert workflow edges to React Flow format
-    const edges = workflowEdges.map(edge => ({
-      id: edge.id || `edge_${edge.from}_${edge.to}`,
-      source: edge.from,
-      target: edge.to,
-      sourceHandle: edge.sourceHandle || null, // Preserve handle ID for condition nodes
-      targetHandle: edge.targetHandle || null,
-      type: 'smoothstep',
-      animated: true,
-    }));
+    // Convert workflow edges to React Flow format with labels
+    const state = get();
+    const configs = {
+      toolConfigs: state.toolConfigs,
+      triggerConfigs: state.triggerConfigs,
+      agentConfigs: state.agentConfigs,
+    };
+    
+    // Convert edges with labels
+    const edges = workflowEdges.map(edge => {
+      const sourceNode = nodes.find(n => n.id === edge.from);
+      const sourceHandle = edge.sourceHandle || null;
+      
+      // Get label from source node outputs
+      let label = null;
+      if (sourceNode && sourceHandle) {
+        label = getEdgeLabel(sourceNode, sourceHandle, configs);
+      }
+      
+      // Only include label if source node has multiple outputs
+      // Use generic helper function that works for any node type
+      const multipleOutputs = hasMultipleOutputs(sourceNode, configs);
+      
+      return {
+        id: edge.id || `edge_${edge.from}_${edge.to}`,
+        source: edge.from,
+        target: edge.to,
+        sourceHandle: sourceHandle,
+        targetHandle: edge.targetHandle || null,
+        type: 'workflowEdge',
+        animated: true,
+        data: multipleOutputs && label ? { label } : {},
+      };
+    });
     
     set({
       workflowId: workflow.id,
@@ -124,13 +219,39 @@ export const useWorkflowStore = create((set, get) => ({
   
   onConnect: (connection) => {
     const state = get();
-    const newEdges = addEdge(connection, state.edges);
+    
+    // Get source node to determine if we need a label
+    const sourceNode = state.nodes.find(n => n.id === connection.source);
+    const sourceHandle = connection.sourceHandle || null;
+    
+    const configs = {
+      toolConfigs: state.toolConfigs,
+      triggerConfigs: state.triggerConfigs,
+      agentConfigs: state.agentConfigs,
+    };
+    
+    // Get label from source node outputs
+    let label = null;
+    if (sourceNode && sourceHandle) {
+      label = getEdgeLabel(sourceNode, sourceHandle, configs);
+    }
+    
+    // Check if source node has multiple outputs (works generically for any node type)
+    const multipleOutputs = hasMultipleOutputs(sourceNode, configs);
+    
+    // Create edge with label data if needed
+    const edgeWithData = {
+      ...connection,
+      type: 'workflowEdge',
+      data: multipleOutputs && label ? { label } : {},
+    };
+    
+    const newEdges = addEdge(edgeWithData, state.edges);
     
     // Auto-populate condition node field when connected from agent/trigger node
     if (connection.target) {
       const targetNode = state.nodes.find(n => n.id === connection.target);
       if (targetNode && targetNode.data.nodeType === 'condition') {
-        const sourceNode = state.nodes.find(n => n.id === connection.source);
         if (sourceNode) {
           const sourceNodeType = sourceNode.data.nodeType;
           let suggestedField = '';
@@ -291,24 +412,51 @@ export const useWorkflowStore = create((set, get) => ({
   },
   
   updateNode: (nodeId, data) => {
+    const state = get();
+    const updatedNodes = state.nodes.map(node =>
+      node.id === nodeId
+        ? { 
+            ...node, 
+            data: { 
+              ...node.data, 
+              ...data,
+              // Deep merge config if both exist
+              config: data.config 
+                ? { ...node.data.config, ...data.config }
+                : (data.config !== undefined ? data.config : node.data.config),
+              // Update label if title is provided
+              label: data.label || data.config?.title || node.data.label,
+            } 
+          }
+        : node
+    );
+    
+    // Update edge labels for edges connected from this node
+    const configs = {
+      toolConfigs: state.toolConfigs,
+      triggerConfigs: state.triggerConfigs,
+      agentConfigs: state.agentConfigs,
+    };
+    
+    const updatedEdges = state.edges.map(edge => {
+      if (edge.source === nodeId && edge.sourceHandle) {
+        const sourceNode = updatedNodes.find(n => n.id === nodeId);
+        const label = getEdgeLabel(sourceNode, edge.sourceHandle, configs);
+        
+        // Use generic helper function that works for any node type
+        const multipleOutputs = hasMultipleOutputs(sourceNode, configs);
+        
+        return {
+          ...edge,
+          data: multipleOutputs && label ? { label } : {},
+        };
+      }
+      return edge;
+    });
+    
     set({
-      nodes: get().nodes.map(node =>
-        node.id === nodeId
-          ? { 
-              ...node, 
-              data: { 
-                ...node.data, 
-                ...data,
-                // Deep merge config if both exist
-                config: data.config 
-                  ? { ...node.data.config, ...data.config }
-                  : (data.config !== undefined ? data.config : node.data.config),
-                // Update label if title is provided
-                label: data.label || data.config?.title || node.data.label,
-              } 
-            }
-          : node
-      ),
+      nodes: updatedNodes,
+      edges: updatedEdges,
     });
   },
   
@@ -448,6 +596,7 @@ export const useWorkflowStore = create((set, get) => ({
         to: edge.target,
         sourceHandle: edge.sourceHandle || null, // Preserve handle ID for condition nodes
         targetHandle: edge.targetHandle || null,
+        // Note: label is not saved to database as it can be regenerated from source node outputs
       })),
     };
   },

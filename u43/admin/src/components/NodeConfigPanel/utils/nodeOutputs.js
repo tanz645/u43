@@ -20,14 +20,45 @@ export const normalizeId = (id) => {
 
 /**
  * Get outputs for a specific node based on its type and configuration
+ * 
+ * This function is designed to be extensible - it will automatically work for any node type
+ * that defines outputs in their configuration files or in the node's data/config.
+ * 
+ * **For Dynamic Outputs:**
+ * If a future node has dynamic outputs (outputs that change based on configuration),
+ * simply set `node.data.config.outputs` when the config changes, and this function will
+ * automatically pick them up. The edge labels will update automatically via `updateNode`.
+ * 
+ * Example for a future node with dynamic outputs:
+ * ```javascript
+ * // When node config changes, update outputs dynamically
+ * updateNode(nodeId, {
+ *   config: {
+ *     ...existingConfig,
+ *     outputs: computeDynamicOutputs(newConfig) // Your dynamic logic
+ *   }
+ * });
+ * ```
+ * 
  * @param {Object} node - The node object
- * @param {Object} configs - Object containing toolConfigs, triggerConfigs, agentConfigs
+ * @param {Object} configs - Object containing toolConfigs, triggerConfigs, agentConfigs, and potentially other config types
  * @returns {Object|null} Outputs object or null
  */
 export const getNodeOutputs = (node, configs = {}) => {
   const { toolConfigs = {}, triggerConfigs = {}, agentConfigs = {} } = configs;
   const nodeType = node.data?.nodeType;
   
+  // First, check if outputs are defined directly in the node's config/data
+  // This allows nodes to define outputs dynamically without needing a config file
+  // This is checked FIRST so dynamic outputs take precedence over static config files
+  if (node.data?.config?.outputs && typeof node.data.config.outputs === 'object') {
+    return node.data.config.outputs;
+  }
+  if (node.data?.outputs && typeof node.data.outputs === 'object') {
+    return node.data.outputs;
+  }
+  
+  // Handle known node types with their specific config systems
   if (nodeType === 'trigger') {
     const triggerId = node.data.config?.trigger_type || node.data.triggerType;
     if (triggerId && triggerConfigs[triggerId]?.outputs) {
@@ -106,6 +137,10 @@ export const getNodeOutputs = (node, configs = {}) => {
     }
     return null;
   }
+  
+  // For future node types: check if there's a generic config system
+  // This allows extensibility - if a new node type has a config with outputs, it will work
+  // Example: if configs has a 'customNodeConfigs' or similar, we could check that here
   
   return null;
 };

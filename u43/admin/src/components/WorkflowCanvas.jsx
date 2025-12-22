@@ -8,9 +8,14 @@ import ReactFlow, {
 import 'reactflow/dist/style.css';
 import { useWorkflowStore } from '../store/workflowStore';
 import WorkflowNode from './WorkflowNode';
+import WorkflowEdge from './WorkflowEdge';
 
 const nodeTypes = {
   workflowNode: WorkflowNode,
+};
+
+const edgeTypes = {
+  workflowEdge: WorkflowEdge,
 };
 
 export default function WorkflowCanvas() {
@@ -90,8 +95,9 @@ export default function WorkflowCanvas() {
           selectNode(node.id);
         }}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         defaultEdgeOptions={{
-          type: 'smoothstep',
+          type: 'workflowEdge',
           animated: true,
         }}
         fitView

@@ -1,6 +1,6 @@
 {
   "name": "u43-wordpress-agentic-workflow",
-  "version": "1.0.52",
+  "version": "1.0.62",
   "type": "module",
   "description": "Visual workflow automation with AI agents for WordPress",
   "scripts": {

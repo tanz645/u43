@@ -347,6 +347,152 @@ $workflows = $flow_manager->get_workflows(['limit' => 100]);
     <?php else: ?>
         <!-- Executions List View -->
         <div class="u43-executions-list">
+            <!-- Log Retention Settings -->
+            <?php
+            $retention_settings = \U43\Log_Cleanup::get_settings();
+            $retention_enabled = $retention_settings['enabled'];
+            $retention_duration = $retention_settings['duration'];
+            $retention_unit = $retention_settings['unit'];
+            ?>
+            <div class="u43-log-retention-settings" style="margin: 20px 0; padding: 15px; background: #fff; border: 1px solid #ccd0d4; box-shadow: 0 1px 1px rgba(0,0,0,.04);">
+                <h2 style="margin-top: 0;"><?php esc_html_e('Log Retention Settings', 'u43'); ?></h2>
+                <p class="description"><?php esc_html_e('Automatically remove old execution logs based on the duration you specify.', 'u43'); ?></p>
+                
+                <form method="post" action="<?php echo esc_url(admin_url('admin.php?page=u43-executions')); ?>">
+                    <?php wp_nonce_field('u43_log_retention'); ?>
+                    
+                    <table class="form-table">
+                        <tr>
+                            <th scope="row">
+                                <label for="log_retention_enabled"><?php esc_html_e('Enable Automatic Log Removal', 'u43'); ?></label>
+                            </th>
+                            <td>
+                                <label>
+                                    <input type="checkbox" name="log_retention_enabled" id="log_retention_enabled" value="1" <?php checked($retention_enabled, true); ?>>
+                                    <?php esc_html_e('Enable automatic removal of old execution logs', 'u43'); ?>
+                                </label>
+                            </td>
+                        </tr>
+                        <tr id="retention-duration-row" style="<?php echo $retention_enabled ? '' : 'display: none;'; ?>">
+                            <th scope="row">
+                                <label for="log_retention_duration"><?php esc_html_e('Retention Duration', 'u43'); ?></label>
+                            </th>
+                            <td>
+                                <input type="number" name="log_retention_duration" id="log_retention_duration" value="<?php echo esc_attr($retention_duration); ?>" min="1" style="width: 80px; margin-right: 10px;">
+                                <select name="log_retention_unit" id="log_retention_unit" style="margin-right: 10px;">
+                                    <option value="minute" <?php selected($retention_unit, 'minute'); ?>><?php esc_html_e('Minute(s)', 'u43'); ?></option>
+                                    <option value="hour" <?php selected($retention_unit, 'hour'); ?>><?php esc_html_e('Hour(s)', 'u43'); ?></option>
+                                    <option value="day" <?php selected($retention_unit, 'day'); ?>><?php esc_html_e('Day(s)', 'u43'); ?></option>
+                                </select>
+                                <p class="description">
+                                    <?php esc_html_e('Logs older than this duration will be automatically removed. Cleanup runs at the same interval as the selected unit.', 'u43'); ?>
+                                </p>
+                            </td>
+                        </tr>
+                    </table>
+                    
+                    <p class="submit">
+                        <button type="submit" name="u43_save_log_retention" class="button button-primary">
+                            <?php esc_html_e('Save Settings', 'u43'); ?>
+                        </button>
+                    </p>
+                </form>
+                
+                <?php if ($retention_enabled): ?>
+                    <?php
+                    $next_run = wp_next_scheduled('u43_cleanup_old_logs');
+                    $logs_to_delete = \U43\Log_Cleanup::get_logs_to_delete_count();
+                    $is_overdue = $next_run && $next_run < time();
+                    $debug_info = \U43\Log_Cleanup::get_debug_info();
+                    ?>
+                    <div style="margin-top: 15px; padding: 10px; background: <?php echo $is_overdue ? '#fff3cd' : '#e8f4f8'; ?>; border-left: 4px solid <?php echo $is_overdue ? '#ffc107' : '#0073aa'; ?>;">
+                        <strong><?php esc_html_e('Status:', 'u43'); ?></strong>
+                        <?php if ($next_run): ?>
+                            <?php
+                            $next_run_formatted = date_i18n(get_option('date_format') . ' ' . get_option('time_format'), $next_run);
+                            if ($is_overdue): ?>
+                                <p style="margin: 5px 0;">
+                                    <strong style="color: #856404;"><?php esc_html_e('⚠ Cleanup is overdue!', 'u43'); ?></strong><br>
+                                    <?php echo esc_html(sprintf(
+                                        __('Next cleanup was scheduled for: %s', 'u43'),
+                                        $next_run_formatted
+                                    )); ?>
+                                </p>
+                            <?php else: ?>
+                                <p style="margin: 5px 0;">
+                                    <?php echo esc_html(sprintf(
+                                        __('Next cleanup scheduled for: %s', 'u43'),
+                                        $next_run_formatted
+                                    )); ?>
+                                </p>
+                            <?php endif; ?>
+                        <?php else: ?>
+                            <p style="margin: 5px 0;">
+                                <?php esc_html_e('Automatic cleanup is enabled but not scheduled. It will be scheduled shortly.', 'u43'); ?>
+                            </p>
+                        <?php endif; ?>
+                        
+                        <?php if ($logs_to_delete > 0): ?>
+                            <p style="margin: 5px 0;">
+                                <strong><?php echo esc_html(sprintf(
+                                    __('Logs ready for deletion: %d', 'u43'),
+                                    $logs_to_delete
+                                )); ?></strong>
+                                <?php if ($logs_to_delete > 1000): ?>
+                                    <br><small style="color: #856404;">
+                                        <?php esc_html_e('Note: Large volumes are processed in batches of 1000 per scheduled run to prevent timeouts. Manual cleanup can process up to 5000 at once.', 'u43'); ?>
+                                    </small>
+                                <?php endif; ?>
+                            </p>
+                        <?php endif; ?>
+                        
+                        <details style="margin-top: 10px;">
+                            <summary style="cursor: pointer; font-weight: bold;"><?php esc_html_e('Debug Information', 'u43'); ?></summary>
+                            <div style="margin-top: 10px; padding: 10px; background: #f9f9f9; font-family: monospace; font-size: 11px;">
+                                <p><strong>Current Time:</strong> <?php echo esc_html($debug_info['current_time']); ?> (<?php echo esc_html($debug_info['current_timestamp']); ?>)</p>
+                                <?php if (isset($debug_info['cutoff_date'])): ?>
+                                    <p><strong>Cutoff Date:</strong> <?php echo esc_html($debug_info['cutoff_date']); ?> (<?php echo esc_html($debug_info['cutoff_timestamp']); ?>)</p>
+                                    <p><strong>Retention:</strong> <?php echo esc_html($debug_info['duration'] . ' ' . $debug_info['unit']); ?></p>
+                                    <p><strong>Total Executions:</strong> <?php echo esc_html($debug_info['total_executions']); ?></p>
+                                    <p><strong>Logs to Delete:</strong> <?php echo esc_html($debug_info['logs_to_delete']); ?></p>
+                                    <?php if (isset($debug_info['oldest_execution'])): ?>
+                                        <p><strong>Oldest Execution:</strong> ID <?php echo esc_html($debug_info['oldest_execution']['id']); ?>, 
+                                        Started: <?php echo esc_html($debug_info['oldest_execution']['started_at']); ?>, 
+                                        Age: <?php echo esc_html(human_time_diff($debug_info['oldest_execution']['age_seconds'])); ?> ago</p>
+                                    <?php endif; ?>
+                                <?php endif; ?>
+                            </div>
+                        </details>
+                        
+                        <p style="margin: 10px 0 0 0;">
+                            <form method="post" action="<?php echo esc_url(admin_url('admin.php?page=u43-executions')); ?>" style="display: inline;">
+                                <?php wp_nonce_field('u43_manual_cleanup'); ?>
+                                <button type="submit" name="u43_manual_cleanup" value="1" class="button button-secondary">
+                                    <?php esc_html_e('Run Cleanup Now', 'u43'); ?>
+                                </button>
+                            </form>
+                            <span class="description" style="margin-left: 10px;">
+                                <?php esc_html_e('Manually trigger cleanup to delete old logs immediately. Check debug.log for details.', 'u43'); ?>
+                            </span>
+                        </p>
+                        
+                        <?php
+                        // Show last cleanup result if available
+                        $last_cleanup = get_transient('u43_last_cleanup_result');
+                        if ($last_cleanup):
+                        ?>
+                            <div style="margin-top: 10px; padding: 8px; background: <?php echo $last_cleanup['success'] ? '#d4edda' : '#f8d7da'; ?>; border-left: 4px solid <?php echo $last_cleanup['success'] ? '#28a745' : '#dc3545'; ?>;">
+                                <strong><?php echo $last_cleanup['success'] ? '✓' : '✗'; ?></strong>
+                                <?php echo esc_html($last_cleanup['message']); ?>
+                                <?php if (isset($last_cleanup['deleted']) && $last_cleanup['deleted'] > 0): ?>
+                                    <br><small><?php echo sprintf(__('Deleted: %d log(s)', 'u43'), $last_cleanup['deleted']); ?></small>
+                                <?php endif; ?>
+                            </div>
+                        <?php endif; ?>
+                    </div>
+                <?php endif; ?>
+            </div>
+            
             <!-- Filters -->
             <div class="u43-filters" style="margin: 20px 0;">
                 <form method="get" action="<?php echo esc_url(admin_url('admin.php')); ?>">
@@ -450,6 +596,15 @@ jQuery(document).ready(function($) {
     $('.u43-view-node-log').on('click', function() {
         var logId = $(this).data('log-id');
         $('#u43-node-log-' + logId).slideToggle();
+    });
+    
+    // Toggle retention duration row based on enabled checkbox
+    $('#log_retention_enabled').on('change', function() {
+        if ($(this).is(':checked')) {
+            $('#retention-duration-row').show();
+        } else {
+            $('#retention-duration-row').hide();
+        }
     });
 });
 </script>

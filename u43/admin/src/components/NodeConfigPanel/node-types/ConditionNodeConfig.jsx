@@ -109,7 +109,7 @@ export default function ConditionNodeConfig({
       
       <div className="p-3 bg-blue-50 rounded-md">
         <p className="text-xs text-blue-800">
-          <strong>Note:</strong> Connect True branch to the right output handle, False branch to the bottom output handle (if available).
+          <strong>Note:</strong> Connect Yes branch to the right output handle, No branch to the bottom output handle (if available).
         </p>
       </div>
     </div>

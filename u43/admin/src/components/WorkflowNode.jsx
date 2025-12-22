@@ -109,8 +109,8 @@ export default function WorkflowNode({ id, data, selected }) {
   const nodeOutputs = useMemo(() => {
     if (nodeType === 'condition') {
       return {
-        'true': { type: 'boolean', label: 'True' },
-        'false': { type: 'boolean', label: 'False' },
+        'true': { type: 'boolean', label: 'Yes' },
+        'false': { type: 'boolean', label: 'No' },
       };
     }
     
@@ -465,7 +465,7 @@ export default function WorkflowNode({ id, data, selected }) {
             position={Position.Right}
             className="!bg-green-500 !border-white"
             style={{ top: '30%', right: '-6px', left: 'auto', transform: 'none' }}
-            label="True"
+            label="Yes"
           />
           <Handle
             type="source"
@@ -473,7 +473,7 @@ export default function WorkflowNode({ id, data, selected }) {
             position={Position.Right}
             className="!bg-red-500 !border-white"
             style={{ top: '70%', right: '-6px', left: 'auto', transform: 'none' }}
-            label="False"
+            label="No"
           />
         </>
       ) : nodeType === 'agent' && hasOutputs ? (

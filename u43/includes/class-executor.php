@@ -858,9 +858,10 @@ class Executor {
             [
                 'workflow_id' => $workflow_id,
                 'status' => 'running',
+                'started_at' => current_time('mysql'),
                 'trigger_data' => json_encode($trigger_data),
             ],
-            ['%d', '%s', '%s']
+            ['%d', '%s', '%s', '%s']
         );
         
         if ($result) {
@@ -887,9 +888,10 @@ class Executor {
                 'node_id' => $node_id,
                 'node_type' => $node_type,
                 'status' => 'running',
+                'started_at' => current_time('mysql'),
                 'input_data' => json_encode($context),
             ],
-            ['%d', '%s', '%s', '%s', '%s']
+            ['%d', '%s', '%s', '%s', '%s', '%s']
         );
     }
     

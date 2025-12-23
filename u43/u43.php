@@ -3,7 +3,7 @@
  * Plugin Name: U43 - WordPress Agentic Workflow
  * Plugin URI: https://github.com/your-org/u43
  * Description: Visual workflow automation with AI agents for WordPress
- * Version: 1.0.62
+ * Version: 1.0.63
  * Author: Saidul Islam Bhuiyan <tanzibbdc@gmail.com>
  * License: GPL v2 or later
  * Text Domain: u43
@@ -15,7 +15,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('U43_VERSION', '1.0.62');
+define('U43_VERSION', '1.0.63');
 define('U43_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('U43_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('U43_PLUGIN_BASENAME', plugin_basename(__FILE__));

@@ -237,7 +237,7 @@ class Campaign_Manager {
         $contacts_table = $this->wpdb->prefix . 'u43_campaign_contacts';
         
         $pending = $this->wpdb->get_results($this->wpdb->prepare(
-            "SELECT ccr.*, c.name, c.phone 
+            "SELECT ccr.*, c.id as contact_id, c.name, c.phone, c.folder_id, c.notes, c.created_at, c.updated_at, c.created_by
             FROM $rel_table ccr
             JOIN $contacts_table c ON ccr.contact_id = c.id
             WHERE ccr.campaign_id = %d AND ccr.status = 'pending'
@@ -298,6 +298,71 @@ class Campaign_Manager {
     }
     
     /**
+     * Get available contact field variables
+     *
+     * @return array Array of variable definitions
+     */
+    public function get_contact_variables() {
+        return [
+            [
+                'key' => 'name',
+                'label' => 'Name',
+                'description' => 'Contact name',
+                'example' => '{name}'
+            ],
+            [
+                'key' => 'phone',
+                'label' => 'Phone',
+                'description' => 'Contact phone number',
+                'example' => '{phone}'
+            ],
+            [
+                'key' => 'notes',
+                'label' => 'Notes',
+                'description' => 'Contact notes',
+                'example' => '{notes}'
+            ],
+            [
+                'key' => 'id',
+                'label' => 'ID',
+                'description' => 'Contact ID',
+                'example' => '{id}'
+            ]
+        ];
+    }
+    
+    /**
+     * Replace variables in message text with contact data
+     *
+     * @param string $message_text Message text with variables
+     * @param object $contact Contact object
+     * @return string Message text with variables replaced
+     */
+    private function replace_variables($message_text, $contact) {
+        if (empty($message_text)) {
+            return $message_text;
+        }
+        
+        // Map of variable keys to contact field names
+        $variable_map = [
+            'name' => 'name',
+            'phone' => 'phone',
+            'notes' => 'notes',
+            'id' => 'contact_id'
+        ];
+        
+        $replaced_text = $message_text;
+        
+        foreach ($variable_map as $var_key => $field_name) {
+            $placeholder = '{' . $var_key . '}';
+            $value = isset($contact->$field_name) ? (string) $contact->$field_name : '';
+            $replaced_text = str_replace($placeholder, $value, $replaced_text);
+        }
+        
+        return $replaced_text;
+    }
+    
+    /**
      * Send campaign message to a contact
      *
      * @param object $campaign Campaign object
@@ -317,9 +382,12 @@ class Campaign_Manager {
                 'en_US'
             );
         } else {
+            // Replace variables in message text
+            $message_text = $this->replace_variables($campaign->message_text, $campaign_contact);
+            
             // For plain text, we need to use regular message API
             // Note: Marketing messages should use templates, but we'll support plain text for flexibility
-            $result = $this->whatsapp_client->send_message($phone, $campaign->message_text);
+            $result = $this->whatsapp_client->send_message($phone, $message_text);
         }
         
         if ($result['success']) {

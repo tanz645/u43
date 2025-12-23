@@ -38,7 +38,21 @@ $folders = $contact_manager->get_folders();
             </tr>
             <tr id="message_text_row">
                 <th><label for="message_text"><?php esc_html_e('Message Text', 'u43'); ?></label></th>
-                <td><textarea id="message_text" name="message_text" class="large-text" rows="5"></textarea></td>
+                <td>
+                    <textarea id="message_text" name="message_text" class="large-text" rows="5"></textarea>
+                    <p class="description">
+                        <?php esc_html_e('Available variables:', 'u43'); ?>
+                        <span id="variable-list" style="margin-left: 10px;"></span>
+                    </p>
+                    <p class="description" style="margin-top: 5px;">
+                        <button type="button" id="insert-variable-btn" class="button button-small" style="display:none;">
+                            <?php esc_html_e('Insert Variable', 'u43'); ?>
+                        </button>
+                        <select id="variable-selector" style="display:none; margin-left: 5px;">
+                            <option value=""><?php esc_html_e('Select a variable...', 'u43'); ?></option>
+                        </select>
+                    </p>
+                </td>
             </tr>
             <tr id="template_row" style="display:none;">
                 <th><label for="template_name"><?php esc_html_e('Template Name', 'u43'); ?></label></th>
@@ -106,6 +120,62 @@ $folders = $contact_manager->get_folders();
 
 <script>
 jQuery(document).ready(function($) {
+    var contactVariables = [];
+    
+    // Load contact variables
+    $.ajax({
+        url: '<?php echo esc_url(rest_url('u43/v1/campaigns/contact-variables')); ?>',
+        method: 'GET',
+        beforeSend: function(xhr) {
+            xhr.setRequestHeader('X-WP-Nonce', '<?php echo wp_create_nonce('wp_rest'); ?>');
+        },
+        success: function(response) {
+            contactVariables = response;
+            var variableList = response.map(function(v) {
+                return '<code style="cursor: pointer; margin-right: 10px;" title="' + v.description + '" data-variable="' + v.example + '">' + v.example + '</code>';
+            }).join('');
+            $('#variable-list').html(variableList);
+            $('#insert-variable-btn, #variable-selector').show();
+            
+            // Populate selector
+            response.forEach(function(v) {
+                $('#variable-selector').append('<option value="' + v.example + '">' + v.label + ' (' + v.example + ')</option>');
+            });
+            
+            // Click handler for variable codes
+            $('#variable-list code').on('click', function() {
+                var variable = $(this).data('variable');
+                insertVariable(variable);
+            });
+        },
+        error: function() {
+            console.error('Failed to load contact variables');
+        }
+    });
+    
+    // Insert variable function
+    function insertVariable(variable) {
+        var textarea = $('#message_text');
+        var start = textarea[0].selectionStart;
+        var end = textarea[0].selectionEnd;
+        var text = textarea.val();
+        var before = text.substring(0, start);
+        var after = text.substring(end, text.length);
+        
+        textarea.val(before + variable + after);
+        textarea[0].selectionStart = textarea[0].selectionEnd = start + variable.length;
+        textarea.focus();
+    }
+    
+    // Insert variable button handler
+    $('#insert-variable-btn').on('click', function() {
+        var variable = $('#variable-selector').val();
+        if (variable) {
+            insertVariable(variable);
+            $('#variable-selector').val('');
+        }
+    });
+    
     $('#message_type').on('change', function() {
         if ($(this).val() === 'template') {
             $('#message_text_row').hide();

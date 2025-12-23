@@ -227,6 +227,12 @@ class REST_API {
             'permission_callback' => [$this, 'check_permissions'],
         ]);
         
+        register_rest_route('u43/v1', '/campaigns/contact-variables', [
+            'methods' => 'GET',
+            'callback' => [$this, 'get_contact_variables'],
+            'permission_callback' => [$this, 'check_permissions'],
+        ]);
+        
         // Contacts endpoints
         register_rest_route('u43/v1', '/contacts', [
             'methods' => 'GET',
@@ -1449,6 +1455,18 @@ class REST_API {
         ];
         $logs = $campaign_manager->get_campaign_delivery_logs($campaign_id, $args);
         return new \WP_REST_Response($logs, 200);
+    }
+    
+    /**
+     * Get contact variables
+     *
+     * @param \WP_REST_Request $request
+     * @return \WP_REST_Response
+     */
+    public function get_contact_variables($request) {
+        $campaign_manager = new \U43\Campaigns\Campaign_Manager();
+        $variables = $campaign_manager->get_contact_variables();
+        return new \WP_REST_Response($variables, 200);
     }
     
     /**

@@ -16,12 +16,6 @@
         "storage": "encrypted"
       },
       {
-        "id": "qr_code",
-        "name": "QR Code",
-        "type": "session",
-        "storage": "encrypted"
-      },
-      {
         "id": "webhook_business",
         "name": "Webhook + Business ID",
         "type": "webhook",
@@ -63,13 +57,6 @@
       "required": false,
       "label": "Webhook Verify Token",
       "description": "Token for webhook verification",
-      "sensitive": true
-    },
-    "qr_code_session": {
-      "type": "string",
-      "required": false,
-      "label": "QR Code Session",
-      "description": "QR code session data",
       "sensitive": true
     }
   },

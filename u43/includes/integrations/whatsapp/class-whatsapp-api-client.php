@@ -7,6 +7,8 @@
 
 namespace U43\Integrations\WhatsApp;
 
+use U43\Config\Settings_Manager;
+
 class WhatsApp_API_Client {
     
     private $api_token;
@@ -19,7 +21,7 @@ class WhatsApp_API_Client {
      * @param string $api_token API token
      */
     public function __construct($api_token = '') {
-        $this->api_token = $api_token ?: get_option('u43_whatsapp_api_token', '');
+        $this->api_token = $api_token ?: Settings_Manager::get('u43_whatsapp_api_token', '');
     }
     
     /**
@@ -31,7 +33,7 @@ class WhatsApp_API_Client {
      * @return array
      */
     public function send_message($to, $message, $options = []) {
-        $phone_number_id = get_option('u43_whatsapp_phone_number_id', '');
+        $phone_number_id = Settings_Manager::get('u43_whatsapp_phone_number_id', '');
         
         if (empty($phone_number_id)) {
             return [
@@ -65,7 +67,7 @@ class WhatsApp_API_Client {
      * @return array
      */
     public function send_interactive_button_message($to, $body_text, $buttons = [], $header_text = '', $footer_text = '') {
-        $phone_number_id = get_option('u43_whatsapp_phone_number_id', '');
+        $phone_number_id = Settings_Manager::get('u43_whatsapp_phone_number_id', '');
         
         if (empty($phone_number_id)) {
             return [
@@ -136,7 +138,7 @@ class WhatsApp_API_Client {
      * @return array
      */
     public function send_template_message($to, $template_name, $template_params = [], $language_code = 'en_US') {
-        $phone_number_id = get_option('u43_whatsapp_phone_number_id', '');
+        $phone_number_id = Settings_Manager::get('u43_whatsapp_phone_number_id', '');
         
         if (empty($phone_number_id)) {
             return [
@@ -187,7 +189,7 @@ class WhatsApp_API_Client {
      * @return array
      */
     public function send_media($to, $media_url, $media_type, $caption = '') {
-        $phone_number_id = get_option('u43_whatsapp_phone_number_id', '');
+        $phone_number_id = Settings_Manager::get('u43_whatsapp_phone_number_id', '');
         
         if (empty($phone_number_id)) {
             return [
@@ -224,7 +226,7 @@ class WhatsApp_API_Client {
      * @return array
      */
     public function send_template($to, $template_name, $template_params = [], $language_code = 'en') {
-        $phone_number_id = get_option('u43_whatsapp_phone_number_id', '');
+        $phone_number_id = Settings_Manager::get('u43_whatsapp_phone_number_id', '');
         
         if (empty($phone_number_id)) {
             return [
@@ -271,7 +273,7 @@ class WhatsApp_API_Client {
      * @return array
      */
     public function get_phone_number_info($phone_number) {
-        $phone_number_id = get_option('u43_whatsapp_phone_number_id', '');
+        $phone_number_id = Settings_Manager::get('u43_whatsapp_phone_number_id', '');
         
         if (empty($phone_number_id)) {
             return [
@@ -372,7 +374,7 @@ class WhatsApp_API_Client {
      * @return array
      */
     public function send_marketing_message($to, $template_name, $template_params = [], $language_code = 'en_US') {
-        $phone_number_id = get_option('u43_whatsapp_phone_number_id', '');
+        $phone_number_id = Settings_Manager::get('u43_whatsapp_phone_number_id', '');
         
         if (empty($phone_number_id)) {
             return [

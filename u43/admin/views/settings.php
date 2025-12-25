@@ -9,16 +9,16 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-$openai_api_key = get_option('u43_openai_api_key', '');
+$openai_api_key = \U43\Config\Settings_Manager::get('u43_openai_api_key', '');
 
 // Get WhatsApp settings
-$whatsapp_phone_number = get_option('u43_whatsapp_phone_number', '');
-$whatsapp_phone_number_id = get_option('u43_whatsapp_phone_number_id', '');
-$whatsapp_api_token = get_option('u43_whatsapp_api_token', '');
-$whatsapp_business_id = get_option('u43_whatsapp_business_id', '');
-$whatsapp_webhook_url = get_option('u43_whatsapp_webhook_url', '');
-$whatsapp_webhook_verify_token = get_option('u43_whatsapp_webhook_verify_token', '');
-$whatsapp_auth_method = get_option('u43_whatsapp_auth_method', 'phone_token');
+$whatsapp_phone_number = \U43\Config\Settings_Manager::get('u43_whatsapp_phone_number', '');
+$whatsapp_phone_number_id = \U43\Config\Settings_Manager::get('u43_whatsapp_phone_number_id', '');
+$whatsapp_api_token = \U43\Config\Settings_Manager::get('u43_whatsapp_api_token', '');
+$whatsapp_business_id = \U43\Config\Settings_Manager::get('u43_whatsapp_business_id', '');
+$whatsapp_webhook_url = \U43\Config\Settings_Manager::get('u43_whatsapp_webhook_url', '');
+$whatsapp_webhook_verify_token = \U43\Config\Settings_Manager::get('u43_whatsapp_webhook_verify_token', '');
+$whatsapp_auth_method = \U43\Config\Settings_Manager::get('u43_whatsapp_auth_method', 'phone_token');
 
 // Generate webhook URL if not set - force HTTPS for Meta webhook requirement
 if (empty($whatsapp_webhook_url)) {
@@ -28,7 +28,7 @@ if (empty($whatsapp_webhook_url)) {
 }
 
 // Get connection status
-$whatsapp_connection_status = get_option('u43_whatsapp_connection_status', 'disconnected');
+$whatsapp_connection_status = \U43\Config\Settings_Manager::get('u43_whatsapp_connection_status', 'disconnected');
 ?>
 
 <div class="wrap">
@@ -83,9 +83,6 @@ $whatsapp_connection_status = get_option('u43_whatsapp_connection_status', 'disc
                         <select name="whatsapp_auth_method" id="whatsapp_auth_method" class="regular-text">
                             <option value="phone_token" <?php selected($whatsapp_auth_method, 'phone_token'); ?>>
                                 <?php esc_html_e('Phone Number + API Token', 'u43'); ?>
-                            </option>
-                            <option value="qr_code" <?php selected($whatsapp_auth_method, 'qr_code'); ?>>
-                                <?php esc_html_e('QR Code', 'u43'); ?>
                             </option>
                             <option value="webhook_business" <?php selected($whatsapp_auth_method, 'webhook_business'); ?>>
                                 <?php esc_html_e('Webhook + Business ID', 'u43'); ?>
@@ -159,22 +156,6 @@ $whatsapp_connection_status = get_option('u43_whatsapp_connection_status', 'disc
                         </td>
                     </tr>
                 </table>
-            </div>
-            
-            <!-- QR Code Method -->
-            <div id="qr_code_method" class="auth-method-section">
-                <h3><?php esc_html_e('QR Code Authentication', 'u43'); ?></h3>
-                <p><?php esc_html_e('Scan the QR code with your WhatsApp mobile app to connect.', 'u43'); ?></p>
-                
-                <div id="qr_code_container">
-                    <button type="button" id="generate_qr_code" class="button button-secondary">
-                        <?php esc_html_e('Generate QR Code', 'u43'); ?>
-                    </button>
-                    <div id="qr_code_display" style="margin-top: 20px;"></div>
-                    <p class="description" style="margin-top: 10px;">
-                        <?php esc_html_e('Click the button above to generate a QR code. Scan it with your WhatsApp mobile app.', 'u43'); ?>
-                    </p>
-                </div>
             </div>
             
             <!-- Webhook + Business ID Method -->
@@ -455,73 +436,6 @@ jQuery(document).ready(function($) {
             token += chars.charAt(Math.floor(Math.random() * chars.length));
         }
         $('#whatsapp_webhook_verify_token').val(token);
-    });
-    
-    // Generate QR code
-    $(document).on('click', '#generate_qr_code', function() {
-        var $button = $(this);
-        var $display = $('#qr_code_display');
-        $button.prop('disabled', true).text('<?php echo esc_js(__('Generating...', 'u43')); ?>');
-        
-        var ajaxUrl = typeof ajaxurl !== 'undefined' ? ajaxurl : '<?php echo admin_url('admin-ajax.php'); ?>';
-        
-        $.ajax({
-            url: ajaxUrl,
-            type: 'POST',
-            data: {
-                action: 'u43_generate_whatsapp_qr',
-                nonce: '<?php echo wp_create_nonce('u43_whatsapp_qr'); ?>'
-            },
-            success: function(response) {
-                // Handle WordPress AJAX response format
-                var qrCodeUrl = null;
-                var errorMessage = null;
-                
-                if (response.success) {
-                    // Check both possible response structures
-                    qrCodeUrl = response.data?.qr_code || response.qr_code;
-                    errorMessage = response.data?.message || response.message;
-                    
-                    if (qrCodeUrl) {
-                        $display.html('<img src="' + qrCodeUrl + '" alt="QR Code" style="max-width: 300px; border: 2px solid #ddd; padding: 10px; background: white; display: block; margin: 10px auto;">');
-                        $button.text('<?php echo esc_js(__('Regenerate QR Code', 'u43')); ?>');
-                    } else {
-                        errorMessage = errorMessage || '<?php echo esc_js(__('QR code URL not found in response', 'u43')); ?>';
-                        alert('<?php echo esc_js(__('Failed to generate QR code: ', 'u43')); ?>' + errorMessage);
-                    }
-                } else {
-                    // Handle error response
-                    errorMessage = (response.data && response.data.message) ? response.data.message : 
-                                  (response.message ? response.message : '<?php echo esc_js(__('Unknown error', 'u43')); ?>');
-                    alert('<?php echo esc_js(__('Failed to generate QR code: ', 'u43')); ?>' + errorMessage);
-                }
-            },
-            error: function(xhr, status, error) {
-                var errorMsg = '<?php echo esc_js(__('Error generating QR code', 'u43')); ?>';
-                if (xhr.responseJSON && xhr.responseJSON.data && xhr.responseJSON.data.message) {
-                    errorMsg += ': ' + xhr.responseJSON.data.message;
-                } else if (xhr.responseText) {
-                    try {
-                        var errorResponse = JSON.parse(xhr.responseText);
-                        if (errorResponse.data && errorResponse.data.message) {
-                            errorMsg += ': ' + errorResponse.data.message;
-                        }
-                    } catch(e) {
-                        errorMsg += ': ' + error;
-                    }
-                } else {
-                    errorMsg += ': ' + error;
-                }
-                alert(errorMsg);
-            },
-            complete: function() {
-                // Always re-enable button
-                $button.prop('disabled', false);
-                if ($display.find('img').length === 0) {
-                    $button.text('<?php echo esc_js(__('Generate QR Code', 'u43')); ?>');
-                }
-            }
-        });
     });
 });
 </script>

@@ -114,6 +114,22 @@ class Database {
         
         dbDelta($sql);
         
+        // Settings table
+        $settings_table = $wpdb->prefix . 'u43_settings';
+        $sql = "CREATE TABLE $settings_table (
+            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            setting_key VARCHAR(255) NOT NULL,
+            setting_value LONGTEXT,
+            setting_type VARCHAR(50) DEFAULT 'string',
+            is_encrypted TINYINT(1) DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY unique_setting_key (setting_key),
+            INDEX idx_setting_key (setting_key)
+        ) $charset_collate;";
+        
+        dbDelta($sql);
+        
         // Campaigns tables
         self::create_campaigns_tables($charset_collate);
     }

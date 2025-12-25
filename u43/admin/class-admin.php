@@ -418,11 +418,15 @@ class Admin {
         if (isset($_POST['u43_save_settings']) && check_admin_referer('u43_settings')) {
             $api_key = sanitize_text_field($_POST['openai_api_key'] ?? '');
             // Save even if empty (allows clearing the key)
-            update_option('u43_openai_api_key', $api_key);
-            if ($api_key) {
-                echo '<div class="notice notice-success"><p>' . esc_html__('Settings saved!', 'u43') . '</p></div>';
+            $result = \U43\Config\Settings_Manager::set('u43_openai_api_key', $api_key, 'string', true);
+            if ($result) {
+                if ($api_key) {
+                    echo '<div class="notice notice-success"><p>' . esc_html__('Settings saved!', 'u43') . '</p></div>';
+                } else {
+                    echo '<div class="notice notice-warning"><p>' . esc_html__('API key cleared.', 'u43') . '</p></div>';
+                }
             } else {
-                echo '<div class="notice notice-warning"><p>' . esc_html__('API key cleared.', 'u43') . '</p></div>';
+                echo '<div class="notice notice-error"><p>' . esc_html__('Error saving settings. Please check if the settings table exists.', 'u43') . '</p></div>';
             }
         }
         
@@ -437,15 +441,21 @@ class Admin {
             $auth_method = sanitize_text_field($_POST['whatsapp_auth_method'] ?? 'phone_token');
             
             // Save settings
-            update_option('u43_whatsapp_phone_number', $phone_number);
-            update_option('u43_whatsapp_phone_number_id', $phone_number_id);
-            update_option('u43_whatsapp_api_token', $api_token);
-            update_option('u43_whatsapp_business_id', $business_id);
-            update_option('u43_whatsapp_webhook_url', $webhook_url);
-            update_option('u43_whatsapp_webhook_verify_token', $webhook_verify_token);
-            update_option('u43_whatsapp_auth_method', $auth_method);
+            $results = [
+                \U43\Config\Settings_Manager::set('u43_whatsapp_phone_number', $phone_number, 'string'),
+                \U43\Config\Settings_Manager::set('u43_whatsapp_phone_number_id', $phone_number_id, 'string'),
+                \U43\Config\Settings_Manager::set('u43_whatsapp_api_token', $api_token, 'string', true),
+                \U43\Config\Settings_Manager::set('u43_whatsapp_business_id', $business_id, 'string'),
+                \U43\Config\Settings_Manager::set('u43_whatsapp_webhook_url', $webhook_url, 'string'),
+                \U43\Config\Settings_Manager::set('u43_whatsapp_webhook_verify_token', $webhook_verify_token, 'string', true),
+                \U43\Config\Settings_Manager::set('u43_whatsapp_auth_method', $auth_method, 'string'),
+            ];
             
-            echo '<div class="notice notice-success"><p>' . esc_html__('WhatsApp settings saved!', 'u43') . '</p></div>';
+            if (in_array(false, $results, true)) {
+                echo '<div class="notice notice-error"><p>' . esc_html__('Error saving some settings. Please check if the settings table exists.', 'u43') . '</p></div>';
+            } else {
+                echo '<div class="notice notice-success"><p>' . esc_html__('WhatsApp settings saved!', 'u43') . '</p></div>';
+            }
         }
         
         include U43_PLUGIN_DIR . 'admin/views/settings.php';

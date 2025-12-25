@@ -7,6 +7,8 @@
 
 namespace U43;
 
+use U43\Config\Settings_Manager;
+
 class Data_Cleanup {
     
     /**
@@ -27,30 +29,15 @@ class Data_Cleanup {
                 $wpdb->prefix . 'u43_node_logs',
                 $wpdb->prefix . 'u43_credentials',
                 $wpdb->prefix . 'u43_button_message_mappings',
+                $wpdb->prefix . 'u43_settings',
             ];
             
             foreach ($tables as $table) {
                 $wpdb->query("DROP TABLE IF EXISTS {$table}");
             }
             
-            // Delete all plugin options
-            $options = [
-                'u43_openai_api_key',
-                'u43_whatsapp_phone_number',
-                'u43_whatsapp_phone_number_id',
-                'u43_whatsapp_api_token',
-                'u43_whatsapp_business_id',
-                'u43_whatsapp_webhook_url',
-                'u43_whatsapp_webhook_verify_token',
-                'u43_whatsapp_auth_method',
-                'u43_whatsapp_connection_status',
-                'u43_whatsapp_qr_code_image',
-                'u43_whatsapp_qr_code_session',
-            ];
-            
-            foreach ($options as $option) {
-                delete_option($option);
-            }
+            // Delete all plugin settings from settings table
+            Settings_Manager::delete_all();
             
             // Delete all transients
             $wpdb->query("DELETE FROM {$wpdb->options} WHERE option_name LIKE '_transient_u43_%'");

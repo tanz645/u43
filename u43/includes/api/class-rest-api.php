@@ -7,6 +7,8 @@
 
 namespace U43\API;
 
+use U43\Config\Settings_Manager;
+
 class REST_API {
     
     /**
@@ -734,7 +736,7 @@ class REST_API {
             
             // Facebook pattern: if (mode === 'subscribe' && token === verifyToken) { res.status(200).send(challenge); }
             if ($mode === 'subscribe' && !empty($challenge)) {
-                $verify_token = get_option('u43_whatsapp_webhook_verify_token', '');
+                $verify_token = Settings_Manager::get('u43_whatsapp_webhook_verify_token', '');
                 
                 error_log('U43 WhatsApp Webhook Early: Stored verify token = ' . (!empty($verify_token) ? substr($verify_token, 0, 10) . '...' : 'NOT SET'));
                 
@@ -803,7 +805,7 @@ class REST_API {
             
             // Facebook pattern: if (mode === 'subscribe' && token === verifyToken) { res.status(200).send(challenge); }
             if ($mode === 'subscribe' && !empty($challenge)) {
-                $verify_token = get_option('u43_whatsapp_webhook_verify_token', '');
+                $verify_token = Settings_Manager::get('u43_whatsapp_webhook_verify_token', '');
                 
                 if (empty($verify_token)) {
                     error_log('U43 WhatsApp Webhook rest_pre_dispatch: No verify token configured');
@@ -950,7 +952,7 @@ class REST_API {
             
             // Facebook pattern: if (mode === 'subscribe' && token === verifyToken) { res.status(200).send(challenge); }
             if ($mode === 'subscribe' && !empty($challenge)) {
-                $verify_token = get_option('u43_whatsapp_webhook_verify_token', '');
+                $verify_token = Settings_Manager::get('u43_whatsapp_webhook_verify_token', '');
                 
                 if (empty($verify_token)) {
                     error_log('U43 WhatsApp Webhook Handler: No verify token configured');
@@ -989,7 +991,7 @@ class REST_API {
         // Verify webhook signature (if configured)
         $signature = $request->get_header('X-Hub-Signature-256');
         if (!empty($signature)) {
-            $app_secret = get_option('u43_whatsapp_app_secret', '');
+            $app_secret = Settings_Manager::get('u43_whatsapp_app_secret', '');
             if (!empty($app_secret)) {
                 $payload = $request->get_body();
                 $expected_signature = 'sha256=' . hash_hmac('sha256', $payload, $app_secret);
@@ -1229,7 +1231,7 @@ class REST_API {
      * @return \WP_REST_Response|\WP_Error
      */
     public function get_openai_models($request) {
-        $api_key = get_option('u43_openai_api_key', '');
+        $api_key = Settings_Manager::get('u43_openai_api_key', '');
         
         if (empty($api_key)) {
             return new \WP_Error('api_key_missing', 'OpenAI API key is not configured', ['status' => 400]);

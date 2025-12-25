@@ -19,23 +19,23 @@ if (isset($_POST['u43_save_whatsapp_settings']) && check_admin_referer('u43_what
     $auth_method = sanitize_text_field($_POST['whatsapp_auth_method'] ?? 'phone_token');
     
     // Save settings
-    update_option('u43_whatsapp_phone_number', $phone_number);
-    update_option('u43_whatsapp_api_token', $api_token);
-    update_option('u43_whatsapp_business_id', $business_id);
-    update_option('u43_whatsapp_webhook_url', $webhook_url);
-    update_option('u43_whatsapp_webhook_verify_token', $webhook_verify_token);
-    update_option('u43_whatsapp_auth_method', $auth_method);
+    \U43\Config\Settings_Manager::set('u43_whatsapp_phone_number', $phone_number, 'string');
+    \U43\Config\Settings_Manager::set('u43_whatsapp_api_token', $api_token, 'string', true);
+    \U43\Config\Settings_Manager::set('u43_whatsapp_business_id', $business_id, 'string');
+    \U43\Config\Settings_Manager::set('u43_whatsapp_webhook_url', $webhook_url, 'string');
+    \U43\Config\Settings_Manager::set('u43_whatsapp_webhook_verify_token', $webhook_verify_token, 'string', true);
+    \U43\Config\Settings_Manager::set('u43_whatsapp_auth_method', $auth_method, 'string');
     
     echo '<div class="notice notice-success"><p>' . esc_html__('WhatsApp settings saved!', 'u43') . '</p></div>';
 }
 
 // Get saved settings
-$phone_number = get_option('u43_whatsapp_phone_number', '');
-$api_token = get_option('u43_whatsapp_api_token', '');
-$business_id = get_option('u43_whatsapp_business_id', '');
-$webhook_url = get_option('u43_whatsapp_webhook_url', '');
-$webhook_verify_token = get_option('u43_whatsapp_webhook_verify_token', '');
-$auth_method = get_option('u43_whatsapp_auth_method', 'phone_token');
+$phone_number = \U43\Config\Settings_Manager::get('u43_whatsapp_phone_number', '');
+$api_token = \U43\Config\Settings_Manager::get('u43_whatsapp_api_token', '');
+$business_id = \U43\Config\Settings_Manager::get('u43_whatsapp_business_id', '');
+$webhook_url = \U43\Config\Settings_Manager::get('u43_whatsapp_webhook_url', '');
+$webhook_verify_token = \U43\Config\Settings_Manager::get('u43_whatsapp_webhook_verify_token', '');
+$auth_method = \U43\Config\Settings_Manager::get('u43_whatsapp_auth_method', 'phone_token');
 
 // Generate webhook URL if not set - force HTTPS for Meta webhook requirement
 if (empty($webhook_url)) {
@@ -45,7 +45,7 @@ if (empty($webhook_url)) {
 }
 
 // Get connection status
-$connection_status = get_option('u43_whatsapp_connection_status', 'disconnected');
+$connection_status = \U43\Config\Settings_Manager::get('u43_whatsapp_connection_status', 'disconnected');
 ?>
 
 <div class="wrap">
@@ -67,9 +67,6 @@ $connection_status = get_option('u43_whatsapp_connection_status', 'disconnected'
                         <select name="whatsapp_auth_method" id="whatsapp_auth_method" class="regular-text">
                             <option value="phone_token" <?php selected($auth_method, 'phone_token'); ?>>
                                 <?php esc_html_e('Phone Number + API Token', 'u43'); ?>
-                            </option>
-                            <option value="qr_code" <?php selected($auth_method, 'qr_code'); ?>>
-                                <?php esc_html_e('QR Code', 'u43'); ?>
                             </option>
                             <option value="webhook_business" <?php selected($auth_method, 'webhook_business'); ?>>
                                 <?php esc_html_e('Webhook + Business ID', 'u43'); ?>
@@ -125,20 +122,6 @@ $connection_status = get_option('u43_whatsapp_connection_status', 'disconnected'
                         </td>
                     </tr>
                 </table>
-            </div>
-            
-            <!-- QR Code Method -->
-            <div id="qr_code_method" class="auth-method-section" style="<?php echo $auth_method === 'qr_code' ? '' : 'display:none;'; ?>">
-                <h2><?php esc_html_e('QR Code Authentication', 'u43'); ?></h2>
-                <p><?php esc_html_e('Scan the QR code with your WhatsApp mobile app to connect.', 'u43'); ?></p>
-                
-                <div id="qr_code_container">
-                    <p><?php esc_html_e('QR code will be generated when you save settings.', 'u43'); ?></p>
-                    <button type="button" id="generate_qr_code" class="button">
-                        <?php esc_html_e('Generate QR Code', 'u43'); ?>
-                    </button>
-                    <div id="qr_code_display" style="margin-top: 20px;"></div>
-                </div>
             </div>
             
             <!-- Webhook + Business ID Method -->
@@ -265,34 +248,6 @@ jQuery(document).ready(function($) {
             },
             complete: function() {
                 $button.prop('disabled', false).text('<?php echo esc_js(__('Test Connection', 'u43')); ?>');
-            }
-        });
-    });
-    
-    // Generate QR code
-    $('#generate_qr_code').on('click', function() {
-        var $button = $(this);
-        $button.prop('disabled', true).text('<?php echo esc_js(__('Generating...', 'u43')); ?>');
-        
-        $.ajax({
-            url: ajaxurl,
-            type: 'POST',
-            data: {
-                action: 'u43_generate_whatsapp_qr',
-                nonce: '<?php echo wp_create_nonce('u43_whatsapp_qr'); ?>'
-            },
-            success: function(response) {
-                if (response.success && response.data?.qr_code) {
-                    $('#qr_code_display').html('<img src="' + response.data.qr_code + '" alt="QR Code" style="max-width: 300px;">');
-                } else {
-                    alert('<?php echo esc_js(__('Failed to generate QR code', 'u43')); ?>');
-                }
-            },
-            error: function() {
-                alert('<?php echo esc_js(__('Error generating QR code', 'u43')); ?>');
-            },
-            complete: function() {
-                $button.prop('disabled', false).text('<?php echo esc_js(__('Generate QR Code', 'u43')); ?>');
             }
         });
     });

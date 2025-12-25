@@ -7,6 +7,8 @@
 
 namespace U43\LLM;
 
+use U43\Config\Settings_Manager;
+
 abstract class LLM_Provider_Base {
     
     protected $config;
@@ -38,7 +40,7 @@ abstract class LLM_Provider_Base {
      */
     protected function get_api_key() {
         $integration_id = $this->config['id'] ?? '';
-        return get_option("u43_{$integration_id}_api_key", '');
+        return Settings_Manager::get("u43_{$integration_id}_api_key", '');
     }
 }
 

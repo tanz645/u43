@@ -8,6 +8,8 @@
 
 namespace U43;
 
+use U43\Config\Settings_Manager;
+
 class Log_Cleanup {
     
     const CRON_HOOK = 'u43_cleanup_old_logs';
@@ -284,9 +286,9 @@ class Log_Cleanup {
      */
     public static function get_settings() {
         return [
-            'enabled' => get_option('u43_log_retention_enabled', false),
-            'duration' => intval(get_option('u43_log_retention_duration', 7)),
-            'unit' => get_option('u43_log_retention_unit', 'day'),
+            'enabled' => Settings_Manager::get('u43_log_retention_enabled', false),
+            'duration' => intval(Settings_Manager::get('u43_log_retention_duration', 7)),
+            'unit' => Settings_Manager::get('u43_log_retention_unit', 'day'),
         ];
     }
     
@@ -298,9 +300,9 @@ class Log_Cleanup {
         $duration = max(1, intval($settings['duration'] ?? 7));
         $unit = in_array($settings['unit'] ?? 'day', ['minute', 'hour', 'day']) ? $settings['unit'] : 'day';
         
-        update_option('u43_log_retention_enabled', $enabled);
-        update_option('u43_log_retention_duration', $duration);
-        update_option('u43_log_retention_unit', $unit);
+        Settings_Manager::set('u43_log_retention_enabled', $enabled, 'bool');
+        Settings_Manager::set('u43_log_retention_duration', $duration, 'int');
+        Settings_Manager::set('u43_log_retention_unit', $unit, 'string');
         
         self::schedule_cleanup();
         return true;
@@ -310,7 +312,7 @@ class Log_Cleanup {
      * Check if cleanup is enabled
      */
     private static function is_enabled() {
-        return get_option('u43_log_retention_enabled', false);
+        return Settings_Manager::get('u43_log_retention_enabled', false);
     }
     
     /**

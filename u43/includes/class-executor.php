@@ -90,8 +90,16 @@ class Executor {
                 throw new \Exception('No trigger node found');
             }
             
+            // Build connectivity map: which nodes can reach the trigger node
+            $connected_to_trigger = $this->find_nodes_connected_to_trigger($trigger_node['id'], $graph, $nodes);
+            
             // Execute workflow
-            $context = ['trigger_data' => $trigger_data];
+            // Store trigger_data separately and only make it accessible through connectivity check
+            $context = [
+                '_trigger_data' => $trigger_data, // Internal storage, not directly accessible
+                '_trigger_node_id' => $trigger_node['id'],
+                '_connected_to_trigger' => $connected_to_trigger, // Set of node IDs that can access trigger_data
+            ];
             $this->execute_node($trigger_node, $context, $graph, $nodes);
             
             // Calculate duration
@@ -149,7 +157,8 @@ class Executor {
             
             switch ($node_type) {
                 case 'trigger':
-                    $output = $context['trigger_data'];
+                    // Trigger node always has access to its own data
+                    $output = $context['_trigger_data'];
                     break;
                     
                 case 'agent':
@@ -164,7 +173,7 @@ class Executor {
                     $user_prompt = $node['config']['prompt'] ?? '';
                     
                     // Resolve inputs from config (for action nodes, not for prompts)
-                    $resolved_inputs = $this->resolve_inputs($node['config']['inputs'] ?? [], $context);
+                    $resolved_inputs = $this->resolve_inputs($node['config']['inputs'] ?? [], $context, $node_id);
                     
                     // Validate that a prompt is provided - no default prompts allowed
                     if (empty($user_prompt) && empty($resolved_inputs['prompt'])) {
@@ -174,19 +183,20 @@ class Executor {
                     // Use user's prompt if provided, otherwise use from inputs
                     if (!empty($user_prompt)) {
                         // Resolve variables in prompt (e.g., {{trigger_data.content}}, {{node_id.field}})
-                        $resolved_inputs['prompt'] = $this->resolve_template($user_prompt, $context);
+                        $resolved_inputs['prompt'] = $this->resolve_template($user_prompt, $context, $node_id);
                     } elseif (isset($resolved_inputs['prompt']) && !empty($resolved_inputs['prompt'])) {
                         // Prompt was in inputs config - resolve variables
-                        $resolved_inputs['prompt'] = $this->resolve_template($resolved_inputs['prompt'], $context);
+                        $resolved_inputs['prompt'] = $this->resolve_template($resolved_inputs['prompt'], $context, $node_id);
                     } else {
                         // This should not happen due to validation above, but just in case
                         throw new \Exception('Agent node requires a prompt. Please configure a prompt in the node settings.');
                     }
                     
-                    // Always include trigger_data in context if available
+                    // Always include trigger_data in context if available and node is connected to trigger
                     // For comment triggers, only send the content
-                    if (!empty($context['trigger_data'])) {
-                        $trigger_data = $context['trigger_data'];
+                    $trigger_data = null;
+                    if (!empty($context['_trigger_data']) && $this->can_access_trigger_data($node_id, $context)) {
+                        $trigger_data = $context['_trigger_data'];
                         
                         // For comment triggers, only include the content
                         if (isset($trigger_data['comment_id']) || isset($trigger_data['comment'])) {
@@ -332,11 +342,15 @@ class Executor {
                             throw new \Exception("Action node '{$node_id}' is missing tool_id");
                         }
                         
-                        $inputs = $this->resolve_inputs($node['config']['inputs'] ?? [], $context);
+                        $inputs = $this->resolve_inputs($node['config']['inputs'] ?? [], $context, $node_id);
                         
-                        // Auto-populate comment_id from trigger_data if not provided
+                        // Auto-populate comment_id from trigger_data if not provided and node is connected to trigger
                         // This handles cases where action nodes don't have inputs configured
-                        if (empty($inputs['comment_id']) && !empty($context['trigger_data']['comment_id'])) {
+                        $trigger_data = null;
+                        if (!empty($context['_trigger_data']) && $this->can_access_trigger_data($node_id, $context)) {
+                            $trigger_data = $context['_trigger_data'];
+                        }
+                        if (empty($inputs['comment_id']) && !empty($trigger_data['comment_id'])) {
                             // Check if this tool requires comment_id (WordPress comment tools)
                             $comment_tools = [
                                 'wordpress_approve_comment',
@@ -347,7 +361,7 @@ class Executor {
                             
                             if (in_array($tool_id, $comment_tools) || strpos($tool_id, 'wordpress_') === 0) {
                                 // Ensure comment_id is an integer
-                                $comment_id = absint($context['trigger_data']['comment_id']);
+                                $comment_id = absint($trigger_data['comment_id']);
                                     if ($comment_id > 0) {
                                         $inputs['comment_id'] = $comment_id;
                                     }
@@ -477,7 +491,10 @@ class Executor {
         $value = $config['value'] ?? '';
         
         // Resolve field value from context
-        $field_value = $this->resolve_value($field, $context);
+        // Note: For condition nodes, we need to check connectivity, but condition nodes are typically connected
+        // We'll use the node_id from the node parameter
+        $condition_node_id = $node['id'] ?? null;
+        $field_value = $this->resolve_value($field, $context, $condition_node_id);
         
         $result = false;
         
@@ -519,9 +536,10 @@ class Executor {
      *
      * @param string $template Template string
      * @param array $context Execution context
+     * @param string|null $current_node_id Current node ID for connectivity checking
      * @return string Resolved string
      */
-    private function resolve_template($template, $context) {
+    private function resolve_template($template, $context, $current_node_id = null) {
         if (empty($template) || !is_string($template)) {
             return $template;
         }
@@ -531,7 +549,7 @@ class Executor {
             $resolved = $template;
             foreach ($matches[1] as $match) {
                 $var_path = trim($match);
-                $var_value = $this->resolve_variable_path($var_path, $context);
+                $var_value = $this->resolve_variable_path($var_path, $context, $current_node_id);
                 
                 // Convert to string for replacement
                 if (is_array($var_value)) {
@@ -559,10 +577,22 @@ class Executor {
      *
      * @param string $path Variable path
      * @param array $context Execution context
+     * @param string|null $current_node_id Current node ID for connectivity checking
      * @return mixed Resolved value or null
      */
-    private function resolve_variable_path($path, $context) {
+    private function resolve_variable_path($path, $context, $current_node_id = null) {
         $remaining_path = trim($path);
+        
+        // Check if path starts with trigger_data - only allow if node is connected to trigger
+        if (preg_match('/^trigger_data(\.|\[|$)/', $remaining_path)) {
+            // Check if current node can access trigger_data
+            if (!$this->can_access_trigger_data($current_node_id, $context)) {
+                // Node is not connected to trigger - return null
+                return null;
+            }
+            // Replace trigger_data with _trigger_data for internal access
+            $remaining_path = str_replace('trigger_data', '_trigger_data', $remaining_path);
+        }
         
         // Check for combined parent variable pattern: parents.<type>.<field>
         if (preg_match('/^parents\.([a-zA-Z0-9_]+)\.(.+)$/', $remaining_path, $parent_match)) {
@@ -704,14 +734,15 @@ class Executor {
      *
      * @param string $expression Expression to resolve
      * @param array $context Execution context
+     * @param string|null $current_node_id Current node ID for connectivity checking
      * @return mixed
      */
-    private function resolve_value($expression, $context) {
+    private function resolve_value($expression, $context, $current_node_id = null) {
         // Handle template syntax {{variable}} or {{node_id.field}}
         if (preg_match_all('/\{\{([^}]+)\}\}/', $expression, $matches)) {
             $resolved = $expression;
             foreach ($matches[1] as $match) {
-                $var_value = $this->resolve_variable_path(trim($match), $context);
+                $var_value = $this->resolve_variable_path(trim($match), $context, $current_node_id);
                 $resolved = str_replace('{{' . $match . '}}', $var_value ?? '', $resolved);
             }
             // If entire expression was a template, return the resolved value
@@ -722,7 +753,7 @@ class Executor {
         }
         
         // Direct field access (legacy support)
-        $var_value = $this->resolve_variable_path($expression, $context);
+        $var_value = $this->resolve_variable_path($expression, $context, $current_node_id);
         return $var_value;
     }
     
@@ -753,7 +784,14 @@ class Executor {
             $condition_decision = str_replace(["decision == '", "'"], '', $condition['if']);
             if ($condition_decision === $decision) {
                 $tool_id = $condition['then'];
-                $inputs = ['comment_id' => $context['trigger_data']['comment_id']];
+                // Get comment_id from trigger_data if available and accessible
+                $comment_id = null;
+                if (!empty($context['_trigger_data']) && isset($context['_trigger_data']['comment_id'])) {
+                    // Check if we can access trigger_data (conditional actions are typically connected)
+                    $trigger_data = $context['_trigger_data'];
+                    $comment_id = $trigger_data['comment_id'] ?? null;
+                }
+                $inputs = ['comment_id' => $comment_id];
                 return $this->tools_registry->execute($tool_id, $inputs, $context);
             }
         }
@@ -766,17 +804,18 @@ class Executor {
      *
      * @param array $input_config Input configuration
      * @param array $context Execution context
+     * @param string|null $current_node_id Current node ID for connectivity checking
      * @return array
      */
-    private function resolve_inputs($input_config, $context) {
+    private function resolve_inputs($input_config, $context, $current_node_id = null) {
         $resolved = [];
         foreach ($input_config as $key => $value) {
             // Use resolve_template for proper variable resolution (supports combined parent variables)
             if (is_string($value)) {
-                $resolved[$key] = $this->resolve_template($value, $context);
+                $resolved[$key] = $this->resolve_template($value, $context, $current_node_id);
             } elseif (is_array($value)) {
                 // Recursively resolve arrays
-                $resolved[$key] = $this->resolve_inputs($value, $context);
+                $resolved[$key] = $this->resolve_inputs($value, $context, $current_node_id);
             } else {
                 $resolved[$key] = $value;
             }
@@ -841,6 +880,57 @@ class Executor {
             }
         }
         return null;
+    }
+    
+    /**
+     * Find all nodes that are connected to the trigger node (directly or indirectly)
+     * Uses BFS to traverse from trigger node to all reachable nodes in forward direction
+     *
+     * @param string $trigger_node_id Trigger node ID
+     * @param array $graph Execution graph (forward direction: from -> to)
+     * @param array $all_nodes All nodes
+     * @return array Set of node IDs that are reachable from the trigger node
+     */
+    private function find_nodes_connected_to_trigger($trigger_node_id, $graph, $all_nodes) {
+        $connected = [$trigger_node_id => true]; // Trigger node always has access to itself
+        
+        // BFS from trigger node to find all nodes reachable from it (forward direction)
+        $queue = [$trigger_node_id];
+        $visited = [$trigger_node_id => true];
+        
+        while (!empty($queue)) {
+            $current = array_shift($queue);
+            
+            // Add all nodes that are connected FROM current node
+            if (isset($graph[$current])) {
+                foreach ($graph[$current] as $edge) {
+                    $next_node_id = is_array($edge) ? $edge['node_id'] : $edge;
+                    if (!isset($visited[$next_node_id])) {
+                        $visited[$next_node_id] = true;
+                        $connected[$next_node_id] = true;
+                        $queue[] = $next_node_id;
+                    }
+                }
+            }
+        }
+        
+        return $connected;
+    }
+    
+    /**
+     * Check if a node can access trigger_data
+     *
+     * @param string|null $node_id Node ID to check
+     * @param array $context Execution context
+     * @return bool True if node can access trigger_data
+     */
+    private function can_access_trigger_data($node_id, $context) {
+        if (empty($node_id)) {
+            return false;
+        }
+        
+        $connected_to_trigger = $context['_connected_to_trigger'] ?? [];
+        return isset($connected_to_trigger[$node_id]);
     }
     
     /**
